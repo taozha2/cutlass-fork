@@ -29,7 +29,7 @@
  *
  **************************************************************************************************/
 
-#pragma once
+#include "../common/benchmark_runner.hpp"
 
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/epilogue/collective/intel_pvc_epilogue.hpp"
@@ -39,18 +39,50 @@ using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <
-    typename LayoutA,
-    typename LayoutB,
-    typename LayoutC,
-    typename LayoutD
-    >
-struct PvcGemmBF16BF16FP32 {
+int main(int argc, const char** argv)
+{
+  //
+  // Parse options
+  //
+
+  Options options;
+
+  options.parse(argc, argv);
+
+  if (options.help) {
+    options.print_usage(std::cout) << std::endl;
+    return 0;
+  }
+
+  if (options.error) {
+    std::cerr << "Aborting execution." << std::endl;
+    return -1;
+  }
+
+  //
+  // Run benchmark
+  //
+
+  // The KernelHardwareInfo struct holds the number of EUs on the GPU with a given device ID. This
+  // information is used by the underlying kernel.
+  cutlass::KernelHardwareInfo hw_info;
+
+  // Change device_id to another value if you are running on a machine with multiple GPUs and wish
+  // to use a GPU other than that with device ID 0.
+  hw_info.sm_count = cutlass::KernelHardwareInfo::query_device_multiprocessor_count(hw_info.device_id);
+
+// The code section below describes datatype for input, output matrices and computation between
+// elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
-  using ElementComputeEpilogue = float;               // <- data type of epilogue operations
-  using ElementInputA = bfloat16_t;                   // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;                   // <- data type of elements in input matrix B
+  using ElementComputeEpilogue = float;  // <- data type of epilogue operations
+  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
+  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
+
+  using LayoutA = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::RowMajor;
+  using LayoutC = cutlass::layout::RowMajor;
+  using LayoutD = cutlass::layout::RowMajor;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
@@ -58,13 +90,13 @@ struct PvcGemmBF16BF16FP32 {
   using TiledMma = TiledMMA<
           MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
           Layout<Shape<_1,_1,_1>>,
-          Tile<_32,_64,_32>>;                         // Subgroup level-tile
+          Tile<_32,_64,_32>>;  // Subgroup level-tile
 
   using GmemTiledCopyA = XE_2D_U16x8x16x4x2_LD_N;
   using GmemTiledCopyB = XE_2D_U16x16x16x2x2_V;
 
-  using PipelineStages = Int<3>;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages{}>;
+  constexpr int PipelineStages = 3;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
@@ -85,7 +117,7 @@ struct PvcGemmBF16BF16FP32 {
           XE_2D_U32x8x16x1x1_ST_N,
           void, void>;
 
-  // Mainloop
+// Mainloop
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
@@ -105,10 +137,10 @@ struct PvcGemmBF16BF16FP32 {
   >;
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
-};
 
-using PvcGemmBF16BF16FP32_RRRR = PvcGemmBF16BF16FP32<
-    cutlass::layout::RowMajor,
-    cutlass::layout::RowMajor,
-    cutlass::layout::RowMajor,
-    cutlass::layout::RowMajor>;
+  BenchmarkRunner<Gemm> runner("pvc_gemm_bf16_bf16_fp32_dpas_fp32");
+
+  runner.run(options, hw_info);
+
+  return 0;
+}

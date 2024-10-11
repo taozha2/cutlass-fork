@@ -29,8 +29,6 @@
  *
  **************************************************************************************************/
 
-#pragma once
-
 #include "cutlass/epilogue/collective/default_epilogue.hpp"
 #include "cutlass/gemm/device/gemm_universal.h"
 #include "cutlass/gemm/device/gemm_universal_adapter.h"
@@ -38,6 +36,8 @@
 #include "cutlass/util/GPU_Clock.hpp"
 
 #include "cutlass/util/host_tensor.h"
+#include "cutlass/util/reference/host/tensor_compare.h"
+#include "cutlass/util/reference/host/tensor_copy.h"
 #include "cutlass/util/reference/host/tensor_fill.h"
 #include "cute/tensor.hpp"
 
@@ -51,12 +51,12 @@
 #else
 #include "cutlass/util/reference/device/tensor_fill.h"
 #endif
+#include "cutlass/util/print_error.hpp"
 
 #include <benchmark/benchmark.h>
+#include <limits>
 
 using namespace cute;
-
-namespace cutlass::benchmark {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -80,7 +80,7 @@ bool initialize_block(
     scope_min = Element(-8);
   }
 
-  reference::device::BlockFillRandomUniform(
+  cutlass::reference::device::BlockFillRandomUniform(
        block.get(), block.size(), seed, scope_max, scope_min, 0);
   return true;
 }
@@ -90,22 +90,27 @@ bool initialize_block(
 // Command line options parsing
 struct Options {
 
+  bool help;
   bool error;
 
-  int m, n, k, l;
+  int m, n, k, l, iterations;
   float alpha, beta;
-  std::string bm_name;
 
   Options():
+          help(false),
           error(false),
           m(5120), n(4096), k(4096), l(1),
-          alpha(1.f), beta(0.f),
-          bm_name("unknown")
+          alpha(1.f), beta(0.f)
   { }
 
   // Parses the command line
   void parse(int argc, char const **args) {
-    CommandLine cmd(argc, args);
+    cutlass::CommandLine cmd(argc, args);
+
+    if (cmd.check_cmd_line_flag("help")) {
+      help = true;
+      return;
+    }
 
     cmd.get_cmd_line_argument("m", m, 5120);
     cmd.get_cmd_line_argument("n", n, 4096);
@@ -113,28 +118,29 @@ struct Options {
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
-    cmd.get_cmd_line_argument("bm_name", bm_name, std::string("unknown"));
   }
 
-  std::string benchmark_name() const {
-    std::stringstream full_name;
-    full_name << bm_name << "/";
-    std::string const test_name_suffix = std::to_string(m) + "x" +
-                                   std::to_string(n) + "x" +
-                                   std::to_string(k) + "x" +
-                                   std::to_string(l);
-    full_name << test_name_suffix;
+  /// Prints the usage statement.
+  std::ostream & print_usage(std::ostream &out) const {
 
-    return full_name.str();
+    out << "PVC GEMM Benchmark\n\n"
+        << "Options:\n\n"
+        << "  --help                      If specified, displays this usage statement\n\n"
+        << "  --m=<int>                   Sets the M extent of the GEMM\n"
+        << "  --n=<int>                   Sets the N extent of the GEMM\n"
+        << "  --k=<int>                   Sets the K extent of the GEMM\n"
+        << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+        << "  --alpha=<s32>               Epilogue scalar alpha\n"
+        << "  --beta=<s32>                Epilogue scalar beta\n\n";
+
+    return out;
   }
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <class GemmConfiguration>
-struct BenchmarkRunnerGemm {
-
-  using Gemm = typename GemmConfiguration::Gemm;
+template <class Gemm>
+struct BenchmarkRunner {
 
   using StrideA = typename Gemm::GemmKernel::StrideA;
   using StrideB = typename Gemm::GemmKernel::StrideB;
@@ -167,16 +173,19 @@ struct BenchmarkRunnerGemm {
   StrideB stride_B;
   StrideC stride_C;
   StrideD stride_D;
+  uint64_t seed = 0;
 
-  uint64_t seed;
+  cutlass::DeviceAllocation<ElementA> block_A;
+  cutlass::DeviceAllocation<ElementB> block_B;
+  cutlass::DeviceAllocation<ElementC> block_C;
+  cutlass::DeviceAllocation<ElementOutput> block_D;
+  cutlass::DeviceAllocation<ElementOutput> block_ref_D;
 
-  DeviceAllocation<ElementA> block_A;
-  DeviceAllocation<ElementB> block_B;
-  DeviceAllocation<ElementC> block_C;
-  DeviceAllocation<ElementOutput> block_D;
-  DeviceAllocation<ElementOutput> block_ref_D;
-
-  BenchmarkRunnerGemm() : seed(0) {};
+  BenchmarkRunner(std::string test_name) : test_name(test_name) {
+    int argc = 0;
+    benchmark::SetDefaultTimeUnit(benchmark::kMillisecond);
+    benchmark::Initialize(&argc, nullptr);
+  };
 
   //
   // Methods
@@ -185,18 +194,18 @@ struct BenchmarkRunnerGemm {
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
 
-    TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
-    TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
-    TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
-    TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
+    cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
+    cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
+    cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
+    cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
 
-    reference::device::GemmComplex(
+    cutlass::reference::device::GemmComplex(
             {M, N, K},
             alpha,
             ref_A,
-            ComplexTransform::kNone,
+            cutlass::ComplexTransform::kNone,
             ref_B,
-            ComplexTransform::kNone,
+            cutlass::ComplexTransform::kNone,
             beta,
             ref_C,
             ref_D,
@@ -215,14 +224,14 @@ struct BenchmarkRunnerGemm {
 #endif
 
     // Check if output from CUTLASS kernel and reference kernel are equal or not
-    bool passed = reference::device::BlockCompareEqual(
+    bool passed = cutlass::reference::device::BlockCompareEqual(
       block_ref_D.get(), block_D.get(), block_D.size());
 
     return passed;
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
-  void initialize(const ProblemShapeType& problem_size) {
+  virtual void initialize(const ProblemShapeType& problem_size) {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
     auto [M, N, K, L] = problem_shape_MNKL;
 
@@ -242,13 +251,14 @@ struct BenchmarkRunnerGemm {
     initialize_block(block_C, seed + 2021);
   }
 
-  void run(::benchmark::State& state, const Options& options, const KernelHardwareInfo& hw_info) {
+  virtual void run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
+    benchmark::ClearRegisteredBenchmarks();
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
     initialize(problem_size);
 
     typename Gemm::GemmKernel::Arguments arguments{
-       gemm::GemmUniversalMode::kGemm,
+      cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
       {block_A.get(), stride_A, block_B.get(), stride_B},
       {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
@@ -258,7 +268,7 @@ struct BenchmarkRunnerGemm {
     Gemm gemm_op;
 
     size_t workspace_size = Gemm::get_workspace_size(arguments);
-    device_memory::allocation<uint8_t> workspace(workspace_size);
+    cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
     gemm_op.can_implement(arguments);
 
@@ -279,11 +289,29 @@ struct BenchmarkRunnerGemm {
       throw std::runtime_error("Disposition Failed.");
     }
 
+    std::stringstream full_test_name;
+    full_test_name << test_name << "/";
+    std::string test_name_suffix = std::to_string(options.m) + "x" +
+                                   std::to_string(options.n) + "x" +
+                                   std::to_string(options.k) + "x" +
+                                   std::to_string(options.l);
+    full_test_name << test_name_suffix;
+    benchmark::RegisterBenchmark(full_test_name.str().c_str(), run_benchmark, options, gemm_op)
+    ->UseManualTime();
+    benchmark::RunSpecifiedBenchmarks();
+  }
+
+  ~BenchmarkRunner() {
+    benchmark::Shutdown();
+  }
+    
+private:
+  static void run_benchmark(benchmark::State& state, const Options& options,  Gemm gemm_op) {
     auto tflop = ((2.0 * options.m * options.n * options.k * options.l) * 1e-12);
     auto giga_bytes_transferred = (((options.m * options.k) * sizeof(ElementA) +
-                                     (options.k * options.n) * sizeof(ElementB) +
-                                 (options.beta != 0 ? 2 : 1) * (options.m * options.n) * sizeof(ElementC)) * 1e-9) *
-                                 options.l;
+                                    (options.k * options.n) * sizeof(ElementB) +
+                                (options.beta != 0 ? 2 : 1) * (options.m * options.n) * sizeof(ElementC)) * 1e-9) * 
+                                options.l;
     initialize_counters(state);
     for(auto _ : state) {
       GPU_Clock timer;
@@ -296,15 +324,14 @@ struct BenchmarkRunnerGemm {
     finalize_counters(state, tflop, giga_bytes_transferred);
   }
 
-private:
-  static void initialize_counters(::benchmark::State& state) {
+  static void initialize_counters(benchmark::State& state) {
     state.counters["avg_runtime_ms"] = 0;
     state.counters["avg_tflops"] = 0;
     state.counters["avg_throughput"] = 0;
     state.counters["best_runtime_ms"] = std::numeric_limits<double>::max();
   }
 
-  static void update_counters(::benchmark::State& state, double ms_elapsed, double tflop, double giga_bytes_transferred) {
+  static void update_counters(benchmark::State& state, double ms_elapsed, double tflop, double giga_bytes_transferred) {
     state.PauseTiming();
     state.counters["avg_runtime_ms"] += ms_elapsed;
     state.counters["avg_tflops"] += tflop / (ms_elapsed * 1000);
@@ -313,59 +340,12 @@ private:
     state.ResumeTiming();
   }
 
-  static void finalize_counters(::benchmark::State& state,  double tflop, double giga_bytes_transferred) {
+  static void finalize_counters(benchmark::State& state,  double tflop, double giga_bytes_transferred) {
     state.counters["avg_runtime_ms"] /= state.iterations();
     state.counters["avg_tflops"] /= state.iterations();
     state.counters["avg_throughput"] /= state.iterations();
     state.counters["best_tflop"] = tflop / (state.counters["best_runtime_ms"] / 1000);
     state.counters["best_bandwidth"] = giga_bytes_transferred / (state.counters["best_runtime_ms"] / 1000);
   }
+  std::string test_name;
 };
-
-///////////////////////////////////////////////////////////////////////////////////////////////////
-
-class BenchmarkRegistry {
-  using BM_Lambda = std::function<void(::benchmark::State& state, Options const&, KernelHardwareInfo const &)>;;
-  std::map<const std::string, BM_Lambda> benchmarks;
-
-  static BenchmarkRegistry& get_instance() {
-    static BenchmarkRegistry runner;
-    return runner;
-  }
-
-  BenchmarkRegistry() = default;
-public:
-  BenchmarkRegistry(BenchmarkRegistry const&) = delete;
-  void operator=(BenchmarkRegistry const&) = delete;
-
-  static auto const& get_benchmark(std::string const& name) {
-    auto& benchs = get_instance().benchmarks;
-    auto it = benchs.find(name);
-    if (it == benchs.end()) {
-      throw std::runtime_error("Benchmark not found");
-    }
-    return it->second;
-  }
-
-  static void Register(std::string const& key, BM_Lambda const func) {
-    auto& benchs = get_instance().benchmarks;
-    if (benchs.find(key) == benchs.end()) {
-      benchs.insert(std::make_pair(key, func));
-    } else {
-      std::cerr << "Benchmark " << key << " duplicated." << std::endl;
-    }
-  }
-};
-
-}
-
-#define CUTLASS_BENCHMARK(F) cutlass::benchmark::BenchmarkRegistry::Register(#F, &F##_func)
-
-#define CUTLASS_CREATE_GEMM_BENCHMARK(F)                          \
-  static void F##_func(                                           \
-      ::benchmark::State& state,                                  \
-      cutlass::benchmark::Options const& options,                 \
-      cutlass::KernelHardwareInfo const& hw_info) {               \
-    auto bench = cutlass::benchmark::BenchmarkRunnerGemm<F>();    \
-    bench.run(state, options, hw_info);                           \
-  }

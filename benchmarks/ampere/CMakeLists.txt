@@ -1,4 +1,4 @@
-# Copyright (c) 2023 - 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Redistribution and use in source and binary forms, with or without
@@ -26,17 +26,18 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-cutlass_test_unit_add_executable(
-  cutlass_test_unit_cute_intel_xe
-  copy_1d.cpp
-  copy_subgroup_block.cpp
-  #copy_block.cpp
-  copy_scatter.cpp
-  mma.cpp
-  gemm_partition_src_dst.cpp
-  gemm_partition_fragment_abc.cpp
-  gemm_tiled_copy_abc.cpp
-  gemm_row_col.cpp
-  gemm_col_row.cpp
-  gemm_col_col.cpp
+
+cutlass_benchmark_add_executable(
+  bench_ampere_gemm_fp16_fp16_fp32_tensor_op_fp32
+  bench_ampere_gemm_fp16_fp16_fp32_tensor_op_fp32.cu
+)
+
+cutlass_benchmark_add_executable(
+  bench_ampere_gemm_bf16_bf16_fp32_tensor_op_fp32
+  bench_ampere_gemm_bf16_bf16_fp32_tensor_op_fp32.cu
+)
+
+cutlass_benchmark_add_executable(
+  bench_ampere_gemm_tf32_tf32_fp32_tensor_op_fp32
+  bench_ampere_gemm_tf32_tf32_fp32_tensor_op_fp32.cu
 )
