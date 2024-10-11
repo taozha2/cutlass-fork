@@ -1,5 +1,5 @@
 /***************************************************************************************************
- * Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
+* Copyright (c) 2024 - 2024 Codeplay Software Ltd. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,57 +28,14 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **************************************************************************************************/
+
 #pragma once
 
-// fwd declare OCL function and OCL types
-#include <sycl.hpp> //for sycl::vec
+#include "../common/benchmark_runner.hpp"
+#include "pvc_gemm_bf16_bf16_fp32.cpp"
 
-namespace cute
-{
-namespace intel
-{
-#ifdef __SYCL_DEVICE_ONLY__
-template <class T, int N> using vector_t = T __attribute__((ext_vector_type(N)));
-#else
-template <class T, int N> using vector_t = sycl::marray<T, N>;
-#endif
+CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_RRRR);
 
-typedef unsigned long ulong;
-typedef unsigned char uchar;
-
-using uchar2 = vector_t<uchar, 2>;
-using uchar4 = vector_t<uchar, 4>;
-using uchar8 = vector_t<uchar, 8>;
-
-using float2 = vector_t<float, 2>;
-using float4 = vector_t<float, 4>;
-using float8 = vector_t<float, 8>;
-
-using short2 = vector_t<short, 2>;
-using short4 = vector_t<short, 4>;
-using short8 = vector_t<short, 8>;
-
-using int2 = vector_t<int, 2>;
-using int4 = vector_t<int, 4>;
-using int8 = vector_t<int, 8>;
-using int16 = vector_t<int, 16>;
-
-using uint2 = vector_t<uint, 2>;
-using uint4 = vector_t<uint, 4>;
-using uint8 = vector_t<uint, 8>;
-using uint16 = vector_t<uint, 16>;
-using uint32 = vector_t<uint, 32>;
-
-using ushort2 = vector_t<ushort, 2>;
-using ushort4 = vector_t<ushort, 4>;
-using ushort8 = vector_t<ushort, 8>;
-using ushort16 = vector_t<ushort, 16>;
-using ushort32 = vector_t<ushort, 32>;
-using ushort64 = vector_t<ushort, 64>;
-
-using ulong2 = vector_t<ulong, 2>;
-using ulong4 = vector_t<ulong, 4>;
-
-using coord_t = vector_t<int, 2>;
-} // namespace intel end
-} // namespace cute end
+static void register_benchmarks() {
+  CUTLASS_BENCHMARK(PvcGemmBF16BF16FP32_RRRR);
+}
