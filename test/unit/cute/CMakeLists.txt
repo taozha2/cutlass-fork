@@ -60,19 +60,16 @@ if (NOT CUTLASS_ENABLE_SYCL)
     )
 else()
   add_subdirectory(layout)
-  add_subdirectory(intel_xe)
 
   add_custom_target(
     cutlass_test_unit_cute
     DEPENDS
     cutlass_test_unit_cute_layout
-    cutlass_test_unit_cute_intel_xe
     )
 
   add_custom_target(
     test_unit_cute
     DEPENDS
     test_unit_cute_layout
-    test_unit_cute_intel_xe
     )
 endif()

@@ -156,10 +156,10 @@ struct ExampleRunner {
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
 
-      cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
-      cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
-      cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
-      cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
+    cutlass::TensorRef ref_A(block_A.get(), LayoutA::packed({M, K}));
+    cutlass::TensorRef ref_B(block_B.get(), LayoutB::packed({K, N}));
+    cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
+    cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
 
     cutlass::reference::device::GemmComplex(
           {M, N, K},
@@ -306,15 +306,15 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x8x16_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x16x16_LD_V;
+  using GmemTiledCopyA = XE_2D_U16x8x16x4x2_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x16x16x2x2_V;
 
   // Workgroup-level tile
-  using TileShape = Shape<_256, _128, _32>;
+  using TileShape = Shape<_256, _256, _32>;
 
   using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
-          Layout<Shape<_8,_2,_1>>,
-          Tile<_64,_32,_32>>; // Subgroup level-tile
+          Layout<Shape<_1,_1,_1>>,
+          Tile<_32,_64,_32>>; // Subgroup level-tile
 
   constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
@@ -333,9 +333,9 @@ int main(int argc, const char** argv)
           ElementOutput,
           cutlass::gemm::TagToStrideC_t<LayoutD>,
           FusionCallBacks,
-          XE_2D_U32x8x16_LD_N,
+          XE_2D_U32x8x16x1x1_LD_N,
           void, void,
-          XE_2D_U32x8x16_ST_N,
+          XE_2D_U32x8x16x1x1_ST_N,
           void, void>;
 
 // Mainloop
