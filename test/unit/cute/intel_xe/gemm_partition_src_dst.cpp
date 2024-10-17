@@ -61,8 +61,8 @@ struct gemm_device_partition_sd {
                             make_layout(make_shape(m, n), make_stride(n, 1)));
 
     // Get the appropriate blocks for this thread block
-    auto cta_coord = make_coord(syclcompat::work_group_id::x(),
-                                syclcompat::work_group_id::y(), _); // (m,n,k)
+    auto cta_coord = make_coord(BlockIdxX(),
+                                BlockIdxY(), _); // (m,n,k)
 
     auto cta_tiler =
         make_shape(Int<wg_tile_m>{}, Int<wg_tile_n>{}, Int<sg_tile_k>{});
