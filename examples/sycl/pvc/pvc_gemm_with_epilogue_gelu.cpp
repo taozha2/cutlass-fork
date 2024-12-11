@@ -45,11 +45,11 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "cutlass/util/reference/device/tensor_relu.h"
+#include "cutlass/util/reference/device/tensor_gelu.h"
 #include "cutlass/tensor_view.h"
 #include "cutlass/coord.h"
 
-#include "common.hpp"
+#include "common.h"
 
 using namespace cute;
 
@@ -186,7 +186,7 @@ struct ExampleRunner {
     syclcompat::wait();
 
     using TensorView = cutlass::TensorView<ElementOutput, LayoutD>;
-    cutlass::reference::device::TensorReLu(TensorView(block_ref_D.get(), LayoutD::packed({M, N}),
+    cutlass::reference::device::TensorGeLu(TensorView(block_ref_D.get(), LayoutD::packed({M, N}),
                                                       cutlass::make_Coord(M, N)));
 
     syclcompat::wait();
@@ -330,7 +330,7 @@ int main(int argc, const char** argv)
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVC<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
-  using EpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::ReLu, ElementOutput,
+  using EpilogueOp = cutlass::epilogue::fusion::LinCombEltAct<cutlass::epilogue::thread::GELU, ElementOutput,
           ElementComputeEpilogue, ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
 
   using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
