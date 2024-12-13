@@ -38,6 +38,28 @@
 #include "cute/algorithm/gemm.hpp"
 #include "cute/tensor_predicate.hpp"
 
+#ifdef __SYCL_DEVICE_ONLY__
+#define SYCL_DEVICE_OCL(x) SYCL_EXTERNAL x
+#else
+#define SYCL_DEVICE_OCL(x) inline x { assert(false); }
+#endif
+typedef uint cl_mem_fence_flags;
+
+SYCL_DEVICE_OCL(void intel_work_group_barrier_arrive(cl_mem_fence_flags flags));
+SYCL_DEVICE_OCL(void intel_work_group_barrier_wait(cl_mem_fence_flags flags));
+#undef SYCL_DEVICE_OCL
+
+
+#ifdef __SYCL_DEVICE_ONLY__
+#define SYCL_DEVICE_BUILTIN(x) SYCL_EXTERNAL extern "C" x
+#else
+#define SYCL_DEVICE_BUILTIN(x) inline x { assert(false); }
+#endif
+SYCL_DEVICE_BUILTIN(void __builtin_IB_work_group_barrier_arrive(uint flag));
+SYCL_DEVICE_BUILTIN(void __builtin_IB_work_group_barrier_wait(uint flag));
+#undef SYCL_DEVICE_BUILTIN
+#define split_barrier_arrive() intel_work_group_barrier_arrive(0)
+#define split_barrier_wait() intel_work_group_barrier_wait(0)
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::gemm::collective {
@@ -302,6 +324,8 @@ struct CollectiveMma<
       }
     }
 
+    split_barrier_arrive();
+
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
       // Copy gmem to rmem for the first k_tile
@@ -320,7 +344,10 @@ struct CollectiveMma<
       for (int i = 0; i < SG_K / SubgroupSize; i++) {
         cute::gemm(tiled_mma, accum, tCrA(_, _, i), tCrB(_, i, _), src_accum);
       }
+      split_barrier_wait();
+      split_barrier_arrive();
     }
+    split_barrier_wait();
   }
 };
 
