@@ -45,7 +45,7 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "common.h"
+#include "common.hpp"
 
 using namespace cute;
 
@@ -227,7 +227,10 @@ struct ExampleRunner {
     size_t workspace_size = Gemm::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
-    gemm_op.can_implement(arguments);
+    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess){
+      std::cout << "Invalid Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+      std::exit(1);
+    }
 
     gemm_op.initialize(arguments, workspace.get());
 
@@ -286,21 +289,18 @@ static constexpr auto gemm_run(Options const& options) {
   using ElementInputB = b_type;                        // <- data type of elements in input matrix B
   using ElementOutput = c_type;                        // <- data type of elements in output matrix D
 
-  // using LayoutA = cutlass::layout::ColumnMajor;
-  // using LayoutB = cutlass::layout::RowMajor;
+  using LayoutA = std::conditional_t<a_row_major, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>;
+  using LayoutB = std::conditional_t<b_row_major, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>;
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  // using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;  // row major load
-  // using GmemTiledCopyA = XE_2D_U16x16x16_LD_T;  // column major load
-
-  // using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;  // row major load
-  // using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;  // column major load
+  using GmemTiledCopyA = std::conditional_t<a_row_major, XE_2D_U16x32x32_LD_N, XE_2D_U16x16x16_LD_T>;
+  using GmemTiledCopyB = std::conditional_t<b_row_major, XE_2D_U16x32x32_LD_V, XE_2D_U16x16x16_LD_T>;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
-  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
+  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
           Layout<Shape<_8,_4,_1>>,
           Tile<_64,_64,_32>>; // Subgroup level-tile
 
@@ -326,23 +326,17 @@ static constexpr auto gemm_run(Options const& options) {
           XE_2D_U32x8x16_ST_N,
           void, void>;
 
-// Mainloop
+  // Mainloop
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
           ElementInputA,
-          cutlass::gemm::TagToStrideA_t<std::conditional_t<a_row_major,
-                                                           cutlass::layout::RowMajor,
-                                                           cutlass::layout::ColumnMajor>>,
+          cutlass::gemm::TagToStrideA_t<LayoutA>,
           ElementInputB,
-          cutlass::gemm::TagToStrideB_t<std::conditional_t<b_row_major,
-                                                           cutlass::layout::RowMajor,
-                                                           cutlass::layout::ColumnMajor>>,
+          cutlass::gemm::TagToStrideB_t<LayoutB>,
           TiledMma,
-          std::conditional_t<a_row_major, XE_2D_U16x32x32_LD_N, XE_2D_U16x16x16_LD_T>,  // A
-          void, void, cute::identity,  // A
-          std::conditional_t<b_row_major, XE_2D_U16x32x32_LD_V, XE_2D_U16x16x16_LD_T>,  // B
-          void, void, cute::identity   // B
+          GmemTiledCopyA, void, void, cute::identity,  // A
+          GmemTiledCopyB, void, void, cute::identity   // B
   >;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
@@ -379,7 +373,7 @@ int main(int argc, const char** argv)
   }
 
   // row major A, row major B
-  gemm_run<true, true, half_t, half_t, float>(options);
+  gemm_run<true, true, bfloat16_t, bfloat16_t, float>(options);
 
   // row major A, column major B
   gemm_run<true, false, bfloat16_t, bfloat16_t, float>(options);
