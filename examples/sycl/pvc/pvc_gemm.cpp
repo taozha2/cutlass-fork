@@ -45,7 +45,7 @@
 #include "cutlass/util/packed_stride.hpp"
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
-#include "common.hpp"
+#include "common.h"
 
 using namespace cute;
 
@@ -227,10 +227,7 @@ struct ExampleRunner {
     size_t workspace_size = Gemm::get_workspace_size(arguments);
     cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
 
-    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess){
-      std::cout << "Invalid Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-      std::exit(1);
-    }
+    gemm_op.can_implement(arguments);
 
     gemm_op.initialize(arguments, workspace.get());
 
@@ -254,7 +251,10 @@ struct ExampleRunner {
       float cute_time = timer.seconds() / options.iterations;
       double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-      printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
+      printf("Cutlass GEMM (A %s, B %s) Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n\n",
+              std::is_same_v<LayoutA, cutlass::layout::RowMajor> ? "RowMajor" : "ColumnMajor",
+              std::is_same_v<LayoutB, cutlass::layout::RowMajor> ? "RowMajor" : "ColumnMajor",
+              tflops / cute_time, cute_time*1000);
     }
 
     return;
@@ -262,26 +262,8 @@ struct ExampleRunner {
 
 };
 
-int main(int argc, const char** argv)
-{
-  //
-  // Parse options
-  //
-
-  Options options;
-
-  options.parse(argc, argv);
-
-  if (options.help) {
-    options.print_usage(std::cout) << std::endl;
-    return 0;
-  }
-
-  if (options.error) {
-    std::cerr << "Aborting execution." << std::endl;
-    return -1;
-  }
-
+template<bool a_row_major, bool b_row_major, class a_type, class b_type, class c_type>
+static constexpr auto gemm_run(Options const& options) {
   //
   // Run examples
   //
@@ -300,22 +282,25 @@ int main(int argc, const char** argv)
   // elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
-  using ElementOutput = float;                        // <- data type of elements in output matrix D
+  using ElementInputA = a_type;                        // <- data type of elements in input matrix A
+  using ElementInputB = b_type;                        // <- data type of elements in input matrix B
+  using ElementOutput = c_type;                        // <- data type of elements in output matrix D
 
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
+  // using LayoutA = cutlass::layout::ColumnMajor;
+  // using LayoutB = cutlass::layout::RowMajor;
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+  // using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;  // row major load
+  // using GmemTiledCopyA = XE_2D_U16x16x16_LD_T;  // column major load
+
+  // using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;  // row major load
+  // using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;  // column major load
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
-  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
           Layout<Shape<_8,_4,_1>>,
           Tile<_64,_64,_32>>; // Subgroup level-tile
 
@@ -341,17 +326,23 @@ int main(int argc, const char** argv)
           XE_2D_U32x8x16_ST_N,
           void, void>;
 
-  // Mainloop
+// Mainloop
   using CollectiveMainloop = cutlass::gemm::collective::CollectiveMma<
           GEMMDispatchPolicy,
           TileShape,
           ElementInputA,
-          cutlass::gemm::TagToStrideA_t<LayoutA>,
+          cutlass::gemm::TagToStrideA_t<std::conditional_t<a_row_major,
+                                                           cutlass::layout::RowMajor,
+                                                           cutlass::layout::ColumnMajor>>,
           ElementInputB,
-          cutlass::gemm::TagToStrideB_t<LayoutB>,
+          cutlass::gemm::TagToStrideB_t<std::conditional_t<b_row_major,
+                                                           cutlass::layout::RowMajor,
+                                                           cutlass::layout::ColumnMajor>>,
           TiledMma,
-          GmemTiledCopyA, void, void, cute::identity,  // A
-          GmemTiledCopyB, void, void, cute::identity   // B
+          std::conditional_t<a_row_major, XE_2D_U16x32x32_LD_N, XE_2D_U16x16x16_LD_T>,  // A
+          void, void, cute::identity,  // A
+          std::conditional_t<b_row_major, XE_2D_U16x32x32_LD_V, XE_2D_U16x16x16_LD_T>,  // B
+          void, void, cute::identity   // B
   >;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
@@ -365,6 +356,39 @@ int main(int argc, const char** argv)
   ExampleRunner<Gemm> runner;
 
   runner.run(options, hw_info);
+}
+
+int main(int argc, const char** argv)
+{
+  //
+  // Parse options
+  //
+
+  Options options;
+
+  options.parse(argc, argv);
+
+  if (options.help) {
+    options.print_usage(std::cout) << std::endl;
+    return 0;
+  }
+
+  if (options.error) {
+    std::cerr << "Aborting execution." << std::endl;
+    return -1;
+  }
+
+  // row major A, row major B
+  gemm_run<true, true, half_t, half_t, float>(options);
+
+  // row major A, column major B
+  gemm_run<true, false, bfloat16_t, bfloat16_t, float>(options);
+
+  // column major A, row major B
+  gemm_run<false, true, bfloat16_t, bfloat16_t, float>(options);
+
+  // column major A, column major B
+  gemm_run<false, false, bfloat16_t, bfloat16_t, float>(options);
 
   return 0;
 }
