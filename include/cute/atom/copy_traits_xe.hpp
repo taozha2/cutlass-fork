@@ -132,15 +132,15 @@ struct XE_2D_LD_Unpack {
 
   XE_2D_LD_Unpack(const void *ptr, uint32_t y,
                   uint32_t x, uint32_t p = 0) : base_ptr(ptr) {
-    if constexpr (is_nkl) {
-      width = is_transpose ? x : y;
-      height = is_transpose ? y : x;
-      pitch = (p == 0 ? width : p);
+    if constexpr (is_nkl ^ is_transpose) {
+      width = y;
+      height = x;
     } else {
-      width = is_transpose ? y : x;
-      height = is_transpose ? x : y;
-      pitch = (p == 0 ? width : p);
+      width = x;
+      height = y
     }
+
+    pitch = (p == 0 ? width : p);
   }
 
   template <class TraitsArgs>
