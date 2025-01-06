@@ -137,7 +137,7 @@ struct XE_2D_LD_Unpack {
       height = x;
     } else {
       width = x;
-      height = y
+      height = y;
     }
 
     pitch = (p == 0 ? width : p);
