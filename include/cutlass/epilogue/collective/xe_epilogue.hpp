@@ -305,7 +305,7 @@ public:
     Tensor trC = make_tensor<typename TiledMma::ValTypeC>(Shape<Int<FragmentSize>>{});
     Tensor trD = make_tensor<typename TiledMma::ValTypeD>(Shape<Int<FragmentSize>>{});
     Tensor rw_coord = params.xe_store_d.get_pvc_tensor(
-            m_offset, n_offset, l_offset,
+            make_coord(m_offset, n_offset, l_offset),
             make_shape(_, Int<FragsM>{}, Int<FragsN>{}));
 
     Tensor mD_crd = make_identity_tensor(make_shape(M,N));

@@ -198,8 +198,8 @@ struct XE_2D_LD_Unpack {
                            intel::coord_t{(int)n, (int)m});
   }
 
-  template <class GShape>
-  CUTE_HOST_DEVICE constexpr auto get_pvc_tensor(int m_coord, int n_coord, int l_coord,
+  template <class Coord, class GShape>
+  CUTE_HOST_DEVICE constexpr auto get_pvc_tensor(Coord const &coord,
                                                  GShape const &shape) const {
 
     auto R = rank(GShape{});
@@ -216,7 +216,7 @@ struct XE_2D_LD_Unpack {
                                                                   [&](auto i, auto s){
                                                                       return E<i>{} * s;
                                                                   }));
-    return make_tensor(make_inttuple_iter(make_coord(m_coord, n_coord, l_coord)),
+    return make_tensor(make_inttuple_iter(coord),
                         make_layout(new_shape, new_stride));
   }
 
@@ -266,8 +266,8 @@ template <class CopyOp, class... ArgTs> struct XE_2D_ST_Unpack {
                  intel::coord_t{(int)n, (int)m}, &*src.data());
   }
 
-  template <class GShape>
-  CUTE_HOST_DEVICE constexpr auto get_pvc_tensor(int m_coord, int n_coord, int l_coord,
+  template <class Coord, class GShape>
+  CUTE_HOST_DEVICE constexpr auto get_pvc_tensor(Coord const &coord,
                                                  GShape const &shape) const {
 
     auto R = rank(GShape{});
@@ -282,7 +282,7 @@ template <class CopyOp, class... ArgTs> struct XE_2D_ST_Unpack {
                                                                   [&](auto i, auto s){
                                                                       return E<i>{} * s;
                                                                   }));
-    return make_tensor(make_inttuple_iter(make_coord(m_coord, n_coord, l_coord)),
+    return make_tensor(make_inttuple_iter(coord),
                         make_layout(new_shape, new_stride));
   }
 
