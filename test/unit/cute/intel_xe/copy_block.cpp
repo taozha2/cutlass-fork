@@ -120,13 +120,13 @@ struct copy_op<dtype, load, store, M, N, false> {
     auto tiled_load = make_xe_2d_copy(
         Copy_Atom<Copy_Traits<load>, dtype>{}.with(device_src.data(), M, N),
         Layout<Shape<_1, Int<SUBGROUP_SIZE>>, Stride<_0, _1>>{},
-        Layout<Shape<decltype(size<0>(typename Copy_Traits<load>::Shape_MN{})),
+        Layout<Shape<decltype(size<0>(typename Copy_Traits<load>::BlockShape{})),
                      _1>,
                Stride<_1, _0>>{});
     auto tiled_store = make_xe_2d_copy(
         Copy_Atom<Copy_Traits<store>, dtype>{}.with(device_output.data(), M, N),
         Layout<Shape<_1, Int<SUBGROUP_SIZE>>, Stride<_0, _1>>{},
-        Layout<Shape<decltype(size<0>(typename Copy_Traits<store>::Shape_MN{})),
+        Layout<Shape<decltype(size<0>(typename Copy_Traits<store>::BlockShape{})),
                      _1>,
                Stride<_1, _0>>{});
     auto blockDim = syclcompat::dim3(size(tiled_load));
@@ -287,12 +287,12 @@ struct copy_op<uint32_t, load, store, M, N, true> {
         Copy_Atom<Copy_Traits<load>, dtype>{}.with(device_src.data(), M, N),
         Layout<Shape<Int<SUBGROUP_SIZE>, _1>, Stride<_1, _0>>{},
         Layout<Shape<_1,
-                     decltype(size<0>(typename Copy_Traits<load>::Shape_MN{}))>,
+                     decltype(size<0>(typename Copy_Traits<load>::BlockShape{}))>,
                Stride<_0, _1>>{});
     auto tiled_store = make_xe_2d_copy(
         Copy_Atom<Copy_Traits<store>, dtype>{}.with(device_output.data(), N, M),
         Layout<Shape<_1, Int<SUBGROUP_SIZE>>, Stride<_0, _1>>{},
-        Layout<Shape<decltype(size<0>(typename Copy_Traits<store>::Shape_MN{})),
+        Layout<Shape<decltype(size<0>(typename Copy_Traits<store>::BlockShape{})),
                      _1>,
                Stride<_1, _0>>{});
     auto blockDim = syclcompat::dim3(size(tiled_load));

@@ -525,11 +525,11 @@ gemm(MMA_Atom<MMA>       const& mma,
   static constexpr auto k = decltype(size<2>(A.shape()))::value;
   static constexpr auto n = decltype(size<1>(B.shape()))::value;
 
-  static constexpr auto m_step = size<0>(typename ATraits::Shape_MN{})
+  static constexpr auto m_step = size<0>(typename ATraits::BlockShape{})
                                       / size<0>(typename MMA_Atom<MMA>::Shape_MNK{});
-  static constexpr auto A_k_step = size<1>(typename ATraits::Shape_MN{})
+  static constexpr auto A_k_step = size<1>(typename ATraits::BlockShape{})
                                       / size<1>(typename MMA_Atom<MMA>::Shape_MNK{});
-  static constexpr auto B_k_step = size<0>(typename BTraits::Shape_MN{})
+  static constexpr auto B_k_step = size<0>(typename BTraits::BlockShape{})
                                       / size<1>(typename MMA_Atom<MMA>::Shape_MNK{});
 
   auto retiled_a = make_tensor(A.data(),
