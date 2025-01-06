@@ -119,7 +119,7 @@ void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N) {
   const int l_coord = BlockIdxZ();
 
   // Copy from GMEM to RMEM and from RMEM to GMEM
-  auto blk_load_S = tiled_copy_load.get_pvc_tensor(m_coord, n_coord, l_coord,
+  auto blk_load_S = tiled_copy_load.get_pvc_tensor(make_coord(m_coord, n_coord, l_coord),
                                                    fragment.shape());
   copy(tiled_copy_load, blk_load_S, fragment);
 
@@ -146,7 +146,7 @@ void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N) {
   }
 #endif
 
-  auto blk_store_D = tiled_copy_store.get_pvc_tensor(m_coord, n_coord, l_coord,
+  auto blk_store_D = tiled_copy_store.get_pvc_tensor(make_coord(m_coord, n_coord, l_coord),
                                                      fragment.shape());
 
   // onlt run first subgroup

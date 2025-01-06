@@ -56,7 +56,7 @@ void copy_kernel_vectorized(TensorS S, TensorD D, TiledLoad load,
   auto thr_tile_load_D = thr_copy_load.partition_D(S);
   auto fragment = make_fragment_like(thr_tile_load_D);
   auto ld_tensor =
-      load.get_pvc_tensor(m_coord, n_coord, l_coord, fragment.shape());
+      load.get_pvc_tensor(make_coord(m_coord, n_coord, l_coord), fragment.shape());
   if constexpr (cute::detail::has_prefetch<CopyOp>)
     prefetch(load, ld_tensor);
   copy(load, ld_tensor, fragment);
@@ -67,7 +67,7 @@ void copy_kernel_vectorized(TensorS S, TensorD D, TiledLoad load,
       make_tensor(static_cast<decltype(fragment) &&>(fragment).data(),
                   thr_copy_store.partition_S(D).shape());
   auto st_tensor =
-      store.get_pvc_tensor(m_coord, n_coord, l_coord, frag_view.shape());
+      store.get_pvc_tensor(make_coord(m_coord, n_coord, l_coord), frag_view.shape());
   copy(store, frag_view, st_tensor);
 
 #if 0

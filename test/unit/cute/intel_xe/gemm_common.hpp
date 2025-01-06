@@ -179,10 +179,10 @@ struct gemm_device_partition_fragment_abc {
 
     auto k_tile_max = size<2>(gA);
     for (int k_tile = 0; k_tile < k_tile_max; ++k_tile) {
-      Tensor blk_tgA = copy_a.get_pvc_tensor(m_coord, k_tile * sg_tile_k,
-                                             l_coord, copy_view_A.shape());
-      Tensor blk_tgB = copy_b.get_pvc_tensor(n_coord, k_tile * sg_tile_k,
-                                             l_coord, copy_view_B.shape());
+      Tensor blk_tgA = copy_a.get_pvc_tensor(make_coord(m_coord, k_tile * sg_tile_k, l_coord),
+                                             copy_view_A.shape());
+      Tensor blk_tgB = copy_b.get_pvc_tensor(make_coord(n_coord, k_tile * sg_tile_k, l_coord),
+                                             copy_view_B.shape());
 
 #if CUTLASS_ENABLE_DEBUG_PRINTS
       if (thread(LOG_THREAD, LOG_GROUP) && k_tile == 1) {
@@ -204,7 +204,7 @@ struct gemm_device_partition_fragment_abc {
     }
 
     Tensor blk_tgC =
-        copy_c.get_pvc_tensor(m_coord, n_coord, l_coord, fragment_C.shape());
+        copy_c.get_pvc_tensor(make_coord(m_coord, n_coord, l_coord), fragment_C.shape());
 
     copy(copy_c, fragment_C, blk_tgC);
   }

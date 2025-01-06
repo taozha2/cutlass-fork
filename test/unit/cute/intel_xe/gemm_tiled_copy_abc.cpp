@@ -174,9 +174,9 @@ struct gemm_device_tiled_copy_abc {
 
     for (int k_tile = 0; k_tile < k_tile_max; ++k_tile) {
       Tensor blk_tgA = tiled_copy_A.get_pvc_tensor(
-          m_coord, k_tile * sg_tile_k, l_coord, tCrA_copy_view.shape());
+          make_coord(m_coord, k_tile * sg_tile_k, l_coord), tCrA_copy_view.shape());
       Tensor blk_tgB = tiled_copy_B.get_pvc_tensor(
-          n_coord, k_tile * sg_tile_k, l_coord, tCrB_copy_view.shape());
+          make_coord(n_coord, k_tile * sg_tile_k, l_coord), tCrB_copy_view.shape());
 
       copy(tiled_copy_A, blk_tgA, tCrA_copy_view);
       copy(tiled_copy_B, blk_tgB, tCrB_copy_view);
@@ -185,7 +185,7 @@ struct gemm_device_tiled_copy_abc {
       cute::gemm(mma, tiled_copy_A, tiled_copy_B, tCrA, tCrB, tCrC);
     }
 
-    Tensor blk_tgC = tiled_copy_C.get_pvc_tensor(m_coord, n_coord, l_coord,
+    Tensor blk_tgC = tiled_copy_C.get_pvc_tensor(make_coord(m_coord, n_coord, l_coord),
                                                  tCrC_copy_view.shape());
     copy(copy_c, tCrC_copy_view, blk_tgC);
   }
