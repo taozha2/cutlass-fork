@@ -78,8 +78,8 @@ void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N) {
   using traits_load = Copy_Traits<XE_2D_U32x8x16_LD_N>;
   using Atom_load = Copy_Atom<traits_load, Element>;
   auto VecLayout =
-      make_layout(make_shape(get<0>(typename traits_load::Shape_MN{}),
-                             get<1>(typename traits_load::Shape_MN{}) / _16{}),
+      make_layout(make_shape(get<0>(typename traits_load::BlockShape{}),
+                             get<1>(typename traits_load::BlockShape{}) / _16{}),
                   Stride<_1, _0>{});
   auto tiled_copy_load = make_xe_2d_copy(Atom_load{}.with(&*S.data(), M, N),
                                          Layout<Shape<_1, _16>>{}, VecLayout);

@@ -66,7 +66,7 @@ template <class T, class dtype>
 static constexpr auto size_of_inst<T, dtype, std::enable_if_t<has_inst_dtype<T>>> = sizeof(typename T::inst_dtype);
 
 template <class ShapeIndicator, class Stride>
-static constexpr bool is_transpose_load = (is_MKL_shape<ShapeIndicator> &&
+static constexpr bool is_mem_column_major = (is_MKL_shape<ShapeIndicator> &&
                                               std::is_same_v<cutlass::detail::StrideToLayoutTagA_t<Stride>,
                                                   cutlass::layout::ColumnMajor>)
                                           || (is_NKL_shape<ShapeIndicator> &&
@@ -117,7 +117,7 @@ struct XE_2D_LD_Unpack {
   uint32_t height;
   uint32_t pitch;
   
-  using Shape_MN = CopyOp::Shape_MN;
+  using BlockShape = CopyOp::BlockShape;
 
   using GStride = typename detail::IndicatorToStride<LayoutIndicator, ShapeIndicator>::type;
 
@@ -125,14 +125,14 @@ struct XE_2D_LD_Unpack {
   static constexpr bool is_nkl = detail::is_NKL_shape<ShapeIndicator>;
   static constexpr bool is_mnl = detail::is_MNL_shape<ShapeIndicator>;
 
-  static constexpr bool is_transpose = detail::is_transpose_load<ShapeIndicator, GStride>;
+  static constexpr bool is_column_major = detail::is_mem_column_major<ShapeIndicator, GStride>;
 
 
   static_assert(is_mkl == is_mnl && is_mkl != is_nkl);
 
   XE_2D_LD_Unpack(const void *ptr, uint32_t y,
                   uint32_t x, uint32_t p = 0) : base_ptr(ptr) {
-    if constexpr (is_nkl ^ is_transpose) {
+    if constexpr (is_nkl ^ is_column_major) {
       width = y;
       height = x;
     } else {
@@ -162,18 +162,18 @@ struct XE_2D_LD_Unpack {
     dtype *base_addr = (dtype *)traits.base_ptr;
   
     int x, y;
-    auto [coord_0, coord_1, z] = src.data().coord_;
-    if constexpr (is_mkl ^ is_transpose) {
-      x = coord_1;
-      y = coord_0;
+    auto [m, n, l] = src.data().coord_;
+    if constexpr (is_mkl ^ is_column_major) {
+      x = n;
+      y = m;
     } else {
-      x = coord_0;
-      y = coord_1;
+      x = m;
+      y = n;
     }
 
     static constexpr auto inst_size = detail::size_of_inst<CopyOp, dtype>;
  
-    CopyOp::copy(base_addr + z * traits.width * traits.height,
+    CopyOp::copy(base_addr + l * traits.width * traits.height,
                  traits.width * sizeof(dtype), traits.height,
                  traits.pitch * sizeof(dtype),
                  intel::coord_t{(int)(x * sizeof(dtype) / inst_size), y},
@@ -205,9 +205,9 @@ struct XE_2D_LD_Unpack {
     auto R = rank(GShape{});
     static_assert(R == 3, "mismatch rank");
 
-    using basis_t =  make_seq<rank(typename CopyOp::Shape_MN{})>;
+    using basis_t =  make_seq<rank(typename CopyOp::BlockShape{})>;
 
-    using shape_mn = CopyOp::Shape_MN;
+    using shape_mn = CopyOp::BlockShape;
     using rvs_shape_mn = decltype(reverse(shape_mn{}));
     using use_shape_mn = std::conditional_t<is_mkl, shape_mn, rvs_shape_mn>;
 
@@ -232,7 +232,7 @@ template <class CopyOp, class... ArgTs> struct XE_2D_ST_Unpack {
   uint32_t height;
   uint32_t pitch;
 
-  using Shape_MN = CopyOp::Shape_MN;
+  using BlockShape = CopyOp::BlockShape;
 
   static constexpr bool is_nkl = false;
 
@@ -273,9 +273,9 @@ template <class CopyOp, class... ArgTs> struct XE_2D_ST_Unpack {
     auto R = rank(GShape{});
     static_assert(R == 3, "mismatch rank");
 
-    using basis_t =  make_seq<rank(typename CopyOp::Shape_MN{})>;
+    using basis_t =  make_seq<rank(typename CopyOp::BlockShape{})>;
 
-    using shape_mn = CopyOp::Shape_MN;
+    using shape_mn = CopyOp::BlockShape;
 
     auto new_shape = cute::tuple_cat(make_shape(_1{}), take<R - 2, R>(shape));
     auto new_stride = cute::tuple_cat(make_stride(_1{}), transform(basis_t{}, shape_mn{},
@@ -1609,7 +1609,7 @@ struct Copy_Traits<XE_2D_U64x8x4_LD_T, args_t...>
 template <class... args_t>
 struct Copy_Traits<XE_2D_U8x2x32_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U8x2x32_ST_N, args_t...> {
-  using Shape_MN = Shape<_2,_32>;
+  using BlockShape = Shape<_2,_32>;
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16,Shape <_16,  _2>>,
@@ -1740,7 +1740,7 @@ struct Copy_Traits<XE_2D_U16x1x16_ST_N, args_t...>
 template <class... args_t>
 struct Copy_Traits<XE_2D_U16x2x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U16x2x16_ST_N, args_t...> {
-  using Shape_MN = Shape<_2, _16>;
+  using BlockShape = Shape<_2, _16>;
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1760,7 +1760,7 @@ struct Copy_Traits<XE_2D_U16x2x16_ST_N, args_t...>
 template <class... args_t>
 struct Copy_Traits<XE_2D_U16x4x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U16x4x16_ST_N, args_t...> {
-  using Shape_MN = Shape<_4, _16>;
+  using BlockShape = Shape<_4, _16>;
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1780,7 +1780,7 @@ struct Copy_Traits<XE_2D_U16x4x16_ST_N, args_t...>
 template <class... args_t>
 struct Copy_Traits<XE_2D_U16x8x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U16x8x16_ST_N, args_t...> {
-  using Shape_MN = Shape<_8, _16>;
+  using BlockShape = Shape<_8, _16>;
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1800,7 +1800,7 @@ struct Copy_Traits<XE_2D_U16x8x16_ST_N, args_t...>
 template <class... args_t>
 struct Copy_Traits<XE_2D_U32x1x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U32x1x16_ST_N, args_t...> {
-  using Shape_MN = Shape<_1, _16>;
+  using BlockShape = Shape<_1, _16>;
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
@@ -1820,7 +1820,7 @@ struct Copy_Traits<XE_2D_U32x1x16_ST_N, args_t...>
 template <class... args_t>
 struct Copy_Traits<XE_2D_U32x2x16_ST_N, args_t...>
     : XE_2D_ST_Unpack<XE_2D_U32x2x16_ST_N, args_t...> {
-  using Shape_MN = Shape<_2, _16>;
+  using BlockShape = Shape<_2, _16>;
   // Logical thread id to thread idx
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit

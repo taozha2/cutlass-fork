@@ -122,14 +122,14 @@ public:
   using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}
                                              .with(static_cast<ElementC const*>(nullptr), int32_t(0), int32_t(0)),
                                              Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                             make_layout(make_shape(get<0>(typename Trait_C::Shape_MN{}),
-                                                                    get<1>(typename Trait_C::Shape_MN{}) / Int<SubgroupSize>{}))));
+                                             make_layout(make_shape(get<0>(typename Trait_C::BlockShape{}),
+                                                                    get<1>(typename Trait_C::BlockShape{}) / Int<SubgroupSize>{}))));
   using Trait_D = Copy_Traits<GmemTiledCopyD>;
   using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}
                                              .with(static_cast<ElementD const*>(nullptr),int32_t(0), int32_t(0)),
                                              Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                             make_layout(make_shape(get<0>(typename Trait_D::Shape_MN{}),
-                                                                    get<1>(typename Trait_D::Shape_MN{}) / Int<SubgroupSize>{}))));
+                                             make_layout(make_shape(get<0>(typename Trait_D::BlockShape{}),
+                                                                    get<1>(typename Trait_D::BlockShape{}) / Int<SubgroupSize>{}))));
 private:
   constexpr static bool is_source_supported = not cute::is_void_v<ElementC>;
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementD>;
@@ -190,8 +190,8 @@ public:
       xe_load_c = make_tiled_copy(Copy_Atom<Copy_Traits<CopyOpG2R>, ElementC>{}.with(
                                   args.ptr_C, M, N),
                                   Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                  make_layout(make_shape(get<0>(typename Trait_C::Shape_MN{}),
-                                                         get<1>(typename Trait_C::Shape_MN{}) / Int<SubgroupSize>{})));
+                                  make_layout(make_shape(get<0>(typename Trait_C::BlockShape{}),
+                                                         get<1>(typename Trait_C::BlockShape{}) / Int<SubgroupSize>{})));
     }
 
     XE_Copy_D xe_store_d = {};
@@ -199,8 +199,8 @@ public:
       xe_store_d = make_tiled_copy(Copy_Atom<Copy_Traits<CopyOpR2G>, ElementD>{}.with(
                                    args.ptr_D, M, N),
                                    Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                   make_layout(make_shape(get<0>(typename Trait_D::Shape_MN{}),
-                                                          get<1>(typename Trait_D::Shape_MN{}) / Int<SubgroupSize>{})));
+                                   make_layout(make_shape(get<0>(typename Trait_D::BlockShape{}),
+                                                          get<1>(typename Trait_D::BlockShape{}) / Int<SubgroupSize>{})));
     }
 
     return {
