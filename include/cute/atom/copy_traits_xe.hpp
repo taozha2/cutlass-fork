@@ -66,7 +66,7 @@ template <class T, class dtype>
 static constexpr auto size_of_inst<T, dtype, std::enable_if_t<has_inst_dtype<T>>> = sizeof(typename T::inst_dtype);
 
 template <class ShapeIndicator, class Stride>
-static constexpr bool is_transpose_load = (is_MKL_shape<ShapeIndicator> &&
+static constexpr bool is_mem_column_major = (is_MKL_shape<ShapeIndicator> &&
                                               std::is_same_v<cutlass::detail::StrideToLayoutTagA_t<Stride>,
                                                   cutlass::layout::ColumnMajor>)
                                           || (is_NKL_shape<ShapeIndicator> &&
@@ -125,14 +125,14 @@ struct XE_2D_LD_Unpack {
   static constexpr bool is_nkl = detail::is_NKL_shape<ShapeIndicator>;
   static constexpr bool is_mnl = detail::is_MNL_shape<ShapeIndicator>;
 
-  static constexpr bool is_transpose = detail::is_transpose_load<ShapeIndicator, GStride>;
+  static constexpr bool is_column_major = detail::is_mem_column_major<ShapeIndicator, GStride>;
 
 
   static_assert(is_mkl == is_mnl && is_mkl != is_nkl);
 
   XE_2D_LD_Unpack(const void *ptr, uint32_t y,
                   uint32_t x, uint32_t p = 0) : base_ptr(ptr) {
-    if constexpr (is_nkl ^ is_transpose) {
+    if constexpr (is_nkl ^ is_column_major) {
       width = y;
       height = x;
     } else {
@@ -162,18 +162,18 @@ struct XE_2D_LD_Unpack {
     dtype *base_addr = (dtype *)traits.base_ptr;
   
     int x, y;
-    auto [coord_0, coord_1, z] = src.data().coord_;
-    if constexpr (is_mkl ^ is_transpose) {
-      x = coord_1;
-      y = coord_0;
+    auto [m, n, l] = src.data().coord_;
+    if constexpr (is_mkl ^ is_column_major) {
+      x = n;
+      y = m;
     } else {
-      x = coord_0;
-      y = coord_1;
+      x = m;
+      y = n;
     }
 
     static constexpr auto inst_size = detail::size_of_inst<CopyOp, dtype>;
  
-    CopyOp::copy(base_addr + z * traits.width * traits.height,
+    CopyOp::copy(base_addr + l * traits.width * traits.height,
                  traits.width * sizeof(dtype), traits.height,
                  traits.pitch * sizeof(dtype),
                  intel::coord_t{(int)(x * sizeof(dtype) / inst_size), y},
