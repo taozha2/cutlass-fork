@@ -49,6 +49,9 @@
 
 using namespace cute;
 
+// gemm row major or column major
+#define GEMM_LAYOUT (3)
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Command line options parsing
@@ -254,7 +257,17 @@ struct ExampleRunner {
       float cute_time = timer.seconds() / options.iterations;
       double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-      printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
+      printf("Cutlass GEMM (%s) Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n",
+#if GEMM_LAYOUT == 0
+              "RowMajor, RowMajor",
+#elif GEMM_LAYOUT == 1
+              "RowMajor, ColumnMajor",
+#elif GEMM_LAYOUT == 2
+              "ColumnMajor, RowMajor",
+#elif GEMM_LAYOUT == 3
+              "ColumnMajor, ColumnMajor",
+#endif
+              tflops / cute_time, cute_time*1000);
     }
 
     return;
@@ -300,17 +313,41 @@ int main(int argc, const char** argv)
   // elements in input matrices.
   using ElementAccumulator = float;                   // <- data type of accumulator
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
+  // data type of A/B
+  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
+  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
+
+#if GEMM_LAYOUT == 0
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::RowMajor;
+  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+#elif GEMM_LAYOUT == 1
+  using LayoutA = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
+  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
+#elif GEMM_LAYOUT == 2
+  using LayoutA = cutlass::layout::ColumnMajor;
+  using LayoutB = cutlass::layout::RowMajor;
+  using GmemTiledCopyA = XE_2D_U16x16x16_LD_T;
+  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+#elif GEMM_LAYOUT == 3
+  using LayoutA = cutlass::layout::ColumnMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
+  using GmemTiledCopyA = XE_2D_U16x16x16_LD_T;
+  using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
+#else
+  static_assert(false);
+#endif
+
+
+
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
