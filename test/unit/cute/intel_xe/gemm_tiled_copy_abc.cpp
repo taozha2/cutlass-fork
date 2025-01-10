@@ -74,7 +74,7 @@ struct gemm_device_tiled_copy_abc {
     TiledCopy copy_a = make_xe_2d_copy(
         atom_load_A{}.with(A, m, k), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
 
-    using traits_load_B = Copy_Traits<traits_b, ShapeNKL>;
+    using traits_load_B = Copy_Traits<traits_b, TagToStrideB_t<RowMajor>>;
     using atom_load_B = Copy_Atom<traits_load_B, TB>;
     TiledCopy copy_b = make_xe_2d_copy(
         atom_load_B{}.with(B, n, k), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});

@@ -40,15 +40,15 @@ template <uint32_t wg_m, uint32_t wg_n, uint32_t sg_m, uint32_t sg_n,
           uint32_t sg_k, class dtype_a, class dtype_b, class dtype_c,
           class traits_a, class traits_b, class traits_c,
           class traits_mma = XE_8x16x16_F32BF16BF16F32_TT,
-          class layout_a = RowMajor,
-          class layout_b = RowMajor>
+          class layout_a = cute::LayoutRight,
+          class layout_b = cute::LayoutLeft>
 struct gemm_device_partition_fragment_abc {
   using TA = dtype_a;
   using TB = dtype_b;
   using TC = dtype_c;
 
-  static constexpr bool is_a_row_major = std::is_same_v<layout_a, RowMajor>;
-  static constexpr bool is_b_row_major = std::is_same_v<layout_b, RowMajor>;;
+  static constexpr bool is_a_row_major = std::is_same_v<layout_a, cute::LayoutRight>;
+  static constexpr bool is_b_row_major = std::is_same_v<layout_b, cute::LayoutLeft>;;
 
   static constexpr uint32_t wg_tile_m = wg_m;
   static constexpr uint32_t wg_tile_n = wg_n;
@@ -61,12 +61,9 @@ struct gemm_device_partition_fragment_abc {
     using namespace cute;
 
     // Represent the full tensors
-    Tensor mA = make_tensor(make_gmem_ptr(A),
-                            make_layout(make_shape(m, k), make_stride(k, 1)));
-    Tensor mB = make_tensor(make_gmem_ptr(B),
-                            make_layout(make_shape(n, k), make_stride(1, n)));
-    Tensor mC = make_tensor(make_gmem_ptr(C),
-                            make_layout(make_shape(m, n), make_stride(n, 1)));
+    Tensor mA = make_tensor(make_gmem_ptr(A), make_shape(m, k), layout_a{});
+    Tensor mB = make_tensor(make_gmem_ptr(B), make_shape(n, k), layout_b{});
+    Tensor mC = make_tensor(make_gmem_ptr(C), make_shape(m, n), cute::LayoutRight{});
 
     // Get the appropriate blocks for this thread block
     auto cta_coord = make_coord(BlockIdxX(), BlockIdxY(), _); // (m,n,k)
@@ -77,20 +74,20 @@ struct gemm_device_partition_fragment_abc {
     Tensor gB = local_tile(mB, cta_tiler, cta_coord, Step<X, _1, _1>{});
     Tensor gC = local_tile(mC, cta_tiler, cta_coord, Step<_1, _1, X>{});
 
-    using traits_load_A = Copy_Traits<traits_a, ShapeMKL, layout_a>;
+    using traits_load_A = Copy_Traits<traits_a, decltype(mA)>;
     using atom_load_A = Copy_Atom<traits_load_A, TA>;
     auto copy_a = make_xe_2d_copy(
-        atom_load_A{}.with(A, m, k), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
+        atom_load_A{}.with(mA), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
 
-    using traits_load_B = Copy_Traits<traits_b, ShapeNKL, layout_b>;
+    using traits_load_B = Copy_Traits<traits_b, decltype(mB)>;
     using atom_load_B = Copy_Atom<traits_load_B, TB>;
     auto copy_b = make_xe_2d_copy(
-        atom_load_B{}.with(B, n, k), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
+        atom_load_B{}.with(mB), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
 
-    using traits_store_C = Copy_Traits<traits_c>;
+    using traits_store_C = Copy_Traits<traits_c, decltype(mC)>;
     using atom_store_C = Copy_Atom<traits_store_C, TC>;
     auto copy_c = make_xe_2d_copy(
-        atom_store_C{}.with(C, m, n), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
+        atom_store_C{}.with(mC), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
 
     auto thread_idx = ThreadIdxX();
 

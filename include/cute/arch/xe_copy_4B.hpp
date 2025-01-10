@@ -607,6 +607,8 @@ struct XE_2D_TF32x32x16_LD_N {
 
 
 struct XE_2D_U32x16x1_LD_T {
+  static constexpr bool is_transpose = true;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -624,6 +626,8 @@ struct XE_2D_U32x16x1_LD_T {
 
 struct XE_2D_U32x16x2_LD_T {
   using BlockShape = Shape<_2, _16>;
+
+  static constexpr bool is_transpose = true;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -643,6 +647,8 @@ struct XE_2D_U32x16x2_LD_T {
 struct XE_2D_U32x16x4_LD_T {
   using BlockShape = Shape<_4, _16>;
 
+  static constexpr bool is_transpose = true;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -660,6 +666,8 @@ struct XE_2D_U32x16x4_LD_T {
 
 struct XE_2D_U32x16x8_LD_T {
   using BlockShape = Shape<_8, _16>;
+
+  static constexpr bool is_transpose = true;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,

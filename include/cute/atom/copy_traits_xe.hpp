@@ -40,23 +40,7 @@ namespace cute {
 
 namespace detail {
 
-struct ShapeMNL {};
-struct ShapeNKL {};
-using  ShapeMKL = ShapeMNL;
-
 static constexpr auto subgroup_size = 16;
-
-
-// ==========  ShapeIndicator  ==========
-template <class ShapeIndicator>
-static constexpr bool is_MNL_shape = std::is_same_v<ShapeIndicator, ShapeMNL>;
-
-template <class ShapeIndicator>
-static constexpr bool is_NKL_shape = std::is_same_v<ShapeIndicator, ShapeNKL>;
-
-template <class ShapeIndicator>
-static constexpr bool is_MKL_shape = is_MNL_shape<ShapeIndicator>;
-
 
 // ==========  size_of_inst  ==========
 template <class, class = void>
@@ -95,43 +79,26 @@ struct value_layout_t<T, std::enable_if_t<has_dst_shape<T>>> {
 
 
 // ==========  is_transpose_load  ==========
-template <class ShapeIndicator, class Stride>
-static constexpr bool is_mem_column_major = (is_MKL_shape<ShapeIndicator> &&
-                                              std::is_same_v<cutlass::detail::StrideToLayoutTagA_t<Stride>,
-                                                  cutlass::layout::ColumnMajor>)
-                                          || (is_NKL_shape<ShapeIndicator> &&
-                                              std::is_same_v<cutlass::detail::StrideToLayoutTagB_t<Stride>,
-                                                  cutlass::layout::ColumnMajor>);
+template <class, class = void>
+static constexpr bool has_is_transpose = false;
+
+template <class T>
+static constexpr bool has_is_transpose<T, cute::void_t<decltype(T::is_transpose)>> = true;
+
+template <class, class = void>
+static constexpr bool is_transpose_load = false;
+
+template <class T>
+static constexpr bool is_transpose_load<T, std::enable_if_t<has_is_transpose<T>>> = T::is_transpose;
 
 
-// ==========  IndicatorToStride  ==========
-template <class LayoutIndicator,
-          class ShapeIndicator, class = void>
-struct IndicatorToStride {
-  static_assert(false);
-};
+// ==========  is_stride_leftmost  ==========
+template <class T, class = void>
+static constexpr bool is_stride_leftmost = std::is_same_v<_1, decltype(get<0>(T{}))>;
 
-template <class LayoutIndicator,
-          class ShapeIndicator>
-struct IndicatorToStride<LayoutIndicator, ShapeIndicator,
-                        std::enable_if_t<std::is_same_v<LayoutIndicator, cutlass::layout::RowMajor> ||
-                                        std::is_same_v<LayoutIndicator, cutlass::layout::ColumnMajor>>> {
-  static_assert(std::is_same_v<ShapeIndicator, ShapeMKL>
-                || std::is_same_v<ShapeIndicator, ShapeNKL>);
-  using type = std::conditional_t<std::is_same_v<ShapeIndicator, ShapeMKL>,
-                                  typename cutlass::detail::TagToStrideA<LayoutIndicator>::type,
-                                  typename cutlass::detail::TagToStrideB<LayoutIndicator>::type>;
-};
+template <class T>
+static constexpr bool is_stride_leftmost<T, cute::void_t<decltype(T{}.stride())>> = std::is_same_v<_1, decltype(get<0>(T{}.stride()))>;
 
-template <class LayoutIndicator,
-          class ShapeIndicator>
-struct IndicatorToStride<LayoutIndicator, ShapeIndicator,
-                        std::enable_if_t<std::is_same_v<LayoutIndicator,
-                                        cutlass::detail::TagToStrideA<cutlass::layout::RowMajor>::type> ||
-                        std::is_same_v<LayoutIndicator,
-                                        cutlass::detail::TagToStrideA<cutlass::layout::ColumnMajor>::type>>> {
-  using type = LayoutIndicator;
-};
 
 } // end namespace detail
 
@@ -141,35 +108,42 @@ static constexpr auto append_pvc_tensor(Tensor_t const &t0, uint32_t shape, uint
   return make_tensor(make_inttuple_iter(t0.data()), append(t0.layout(), make_layout(shape, E<dim>{} * stride)));
 }
 
-template <class CopyOp,
-          class ShapeIndicator = detail::ShapeMNL,
-          class LayoutIndicator = cutlass::layout::RowMajor>
+template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<1>, int64_t>>
 struct XE_2D_LD_Unpack {
+
+  using BlockShape = CopyOp::BlockShape;
+  using Value_Layout = typename detail::value_layout_t<CopyOp>::type;
+  using Traits_LD_t = Copy_Traits<CopyOp, StrideIndicator>;
+
+  static constexpr auto stride_rank = rank(StrideIndicator{});
+  static_assert(stride_rank == 2 || stride_rank == 3);
+
+  // Assume LD_T/LD_N will indicate ColumnMajor and RowMajor
+  static constexpr bool is_column_major = detail::is_transpose_load<CopyOp>;
+
+  // We need reverse some parameters becasue intel xe 2d copy intrinsic always assume the matrix is (M, N):(N, 1) convention
+  static constexpr bool is_need_reversed = detail::is_stride_leftmost<StrideIndicator>;
+
+  // For a logic matrix M-rows and N-columns, user can pass it with the convention (M, N):(N, 1), also can pass it with convention (N, M):(1, N).
+  // It mean (M, N):(N, 1) convention if 'is_convention_MN' is true, (N, M):(1, N) convention otherwise.
+  static constexpr bool is_convention_MN = !(is_need_reversed ^ is_column_major);
+
+  // 2d copy parameters
   const void *base_ptr;
   uint32_t width;
   uint32_t height;
   uint32_t pitch;
-  
-  using BlockShape = CopyOp::BlockShape;
-  using Value_Layout = typename detail::value_layout_t<CopyOp>::type;
-
-  using GStride = typename detail::IndicatorToStride<LayoutIndicator, ShapeIndicator>::type;
-
-  static constexpr bool is_mkl = detail::is_MKL_shape<ShapeIndicator>;
-  static constexpr bool is_nkl = detail::is_NKL_shape<ShapeIndicator>;
-  static constexpr bool is_mnl = detail::is_MNL_shape<ShapeIndicator>;
-
-  static constexpr bool is_column_major = detail::is_mem_column_major<ShapeIndicator, GStride>;
+  uint32_t stride_l = 0;
 
 
-  static_assert(is_mkl == is_mnl && is_mkl != is_nkl);
 
   XE_2D_LD_Unpack(const void *ptr, uint32_t y,
-                  uint32_t x, uint32_t p = 0) : base_ptr(ptr) {
-    if constexpr (is_nkl ^ is_column_major) {
+                 uint32_t x, uint32_t p = 0) : base_ptr(ptr) {
+    if constexpr (is_need_reversed) {
       width = y;
       height = x;
-    } else {
+    }
+    else {
       width = x;
       height = y;
     }
@@ -177,13 +151,34 @@ struct XE_2D_LD_Unpack {
     pitch = (p == 0 ? width : p);
   }
 
-  template <class TraitsArgs>
-  XE_2D_LD_Unpack(TraitsArgs const &traits) : base_ptr(traits.base_ptr),
-              width(traits.width), height(traits.height), pitch(traits.pitch) {}
+  template <class... TensorArgs>
+  XE_2D_LD_Unpack(Tensor<TensorArgs...> const &tensor) {
+    base_ptr = tensor.data().get();
+
+    if constexpr (is_need_reversed)
+    {
+      width = size<0>(tensor.shape());
+      height = size<1>(tensor.shape());
+      pitch = size<1>(tensor.stride());
+    }
+    else
+    {
+      width = size<1>(tensor.shape());
+      height = size<0>(tensor.shape());
+      pitch = size<0>(tensor.stride());
+    }
+
+    if constexpr (stride_rank == 3) {
+      stride_l = size<2>(tensor.stride());
+    }
+  }
+
+  XE_2D_LD_Unpack(Traits_LD_t const &traits) : base_ptr(traits.base_ptr),
+                  width(traits.width), height(traits.height), pitch(traits.pitch),
+                  stride_l(traits.stride_l) {}
 
   XE_2D_LD_Unpack() {}
 
-  using Traits_LD_t = Copy_Traits<CopyOp, ShapeIndicator, LayoutIndicator>;
 
   template <class TS, class SLayout, class TD, class DLayout>
   CUTE_HOST_DEVICE friend constexpr void
@@ -197,17 +192,17 @@ struct XE_2D_LD_Unpack {
   
     int x, y;
     auto [m, n, l] = src.data().coord_;
-    if constexpr (is_mkl ^ is_column_major) {
-      x = n;
-      y = m;
-    } else {
+    if constexpr (is_need_reversed) {
       x = m;
       y = n;
+    } else {
+      x = n;
+      y = m;
     }
 
     static constexpr auto inst_size = detail::size_of_inst<CopyOp, dtype>;
- 
-    CopyOp::copy(base_addr + l * traits.width * traits.height,
+
+    CopyOp::copy(base_addr + l * traits.stride_l,
                  traits.width * sizeof(dtype), traits.height,
                  traits.pitch * sizeof(dtype),
                  intel::coord_t{(int)(x * sizeof(dtype) / inst_size), y},
@@ -226,7 +221,7 @@ struct XE_2D_LD_Unpack {
 
     auto [m, n, l] = src.data().coord_;
 
-    CopyOp::PREFETCH::copy((void *)(base_addr + l * atom.width * atom.height),
+    CopyOp::PREFETCH::copy((void *)(base_addr + l * atom.stride_l),
                            atom.width * sizeof(dtype), atom.height,
                            atom.pitch * sizeof(dtype),
                            intel::coord_t{(int)n, (int)m});
@@ -241,7 +236,7 @@ struct XE_2D_LD_Unpack {
 
     using basis_t =  make_seq<rank(BlockShape{})>;
 
-    using shape_mn = std::conditional_t<is_mkl, BlockShape, decltype(reverse(BlockShape{}))>;
+    using shape_mn = std::conditional_t<is_convention_MN, BlockShape, decltype(reverse(BlockShape{}))>;
 
     auto new_shape = cute::tuple_cat(make_shape(_1{}), take<R - 2, R>(shape));
     auto new_stride = cute::tuple_cat(make_stride(_1{}), transform(basis_t{}, shape_mn{},
@@ -252,37 +247,60 @@ struct XE_2D_LD_Unpack {
                         make_layout(new_shape, new_stride));
   }
 
-  template <class T1, class T2, class... TraitsArgs>
-  static constexpr auto with(T1 && arg1, T2 && arg2, TraitsArgs&&... args) {
-      return Traits_LD_t{arg1, arg2, args...};
+  template <class... TensorArgs>
+  static constexpr auto with(Tensor<TensorArgs...> const &tensor) {
+      return Traits_LD_t{tensor};
+  }
+
+  template<class T0, class T1, class... Ts>
+  static constexpr auto with(T0 && arg0, T1 && arg1, Ts&&... args) {
+      return Traits_LD_t{arg0, arg1, args...};
   }
 };
 
-template <class CopyOp, class... ArgTs> struct XE_2D_ST_Unpack {
-  const void *base_ptr;
-  uint32_t width;
-  uint32_t height;
-  uint32_t pitch;
-
+template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<1>, int64_t>> struct XE_2D_ST_Unpack {
+  using Traits_ST_t = Copy_Traits<CopyOp, StrideIndicator>;
   using BlockShape = CopyOp::BlockShape;
-
   using Value_Layout = decltype(make_layout(make_shape(get<0>(BlockShape{}),
                                                        get<1>(BlockShape{})
                                                           / Int<detail::subgroup_size>{})));
 
-  static constexpr bool is_nkl = false;
+  static constexpr auto stride_rank = rank(StrideIndicator{});
+  static_assert(stride_rank == 2 || stride_rank == 3);
+
+  static constexpr bool is_convention_MN = true;
+
+  const void *base_ptr;
+  uint32_t width;
+  uint32_t height;
+  uint32_t pitch;
+  uint32_t stride_l = 0;
 
   XE_2D_ST_Unpack(const void *ptr, uint32_t y,
-                  uint32_t x, uint32_t p = 0)
-      : base_ptr(ptr), width(x), height(y), pitch(p == 0 ? x : p) {}
+                 uint32_t x, uint32_t p = 0) : base_ptr(ptr) {
+      width = x;
+      height = y;
+      pitch = (p == 0 ? width : p);
+  }
 
-  template <class TraitsArgs>
-  XE_2D_ST_Unpack(TraitsArgs const &traits)  : base_ptr(traits.base_ptr),
-                  width(traits.width), height(traits.height), pitch(traits.pitch) {}
+  template <class... TensorArgs>
+  XE_2D_ST_Unpack(Tensor<TensorArgs...> const &tensor) {
+    base_ptr = tensor.data().get();
+    width = size<1>(tensor.shape());
+    height = size<0>(tensor.shape());
+    pitch = size<0>(tensor.stride());
+
+    if constexpr (stride_rank == 3) {
+      stride_l = size<2>(tensor.stride());
+    }
+  }
+
+  XE_2D_ST_Unpack(Traits_ST_t const &traits)  : base_ptr(traits.base_ptr),
+                  width(traits.width), height(traits.height), pitch(traits.pitch),
+                  stride_l(traits.stride_l) {}
 
   XE_2D_ST_Unpack() {}
 
-  using Traits_ST_t = Copy_Traits<CopyOp, ArgTs...>;
 
   template <class TS, class SLayout, class TD, class DLayout>
   CUTE_HOST_DEVICE friend constexpr void
@@ -296,7 +314,7 @@ template <class CopyOp, class... ArgTs> struct XE_2D_ST_Unpack {
 
     auto [m, n, l] = dst.data().coord_;
 
-    CopyOp::copy(base_addr + l * traits.width * traits.height,
+    CopyOp::copy(base_addr + l * traits.stride_l,
                  (int)(traits.width * sizeof(dtype)), (int)(traits.height),
                  (int)(traits.pitch * sizeof(dtype)),
                  intel::coord_t{(int)n, (int)m}, &*src.data());
@@ -320,9 +338,14 @@ template <class CopyOp, class... ArgTs> struct XE_2D_ST_Unpack {
                         make_layout(new_shape, new_stride));
   }
 
-  template <class T1, class T2, class... TraitsArgs>
-  static constexpr auto with(T1 && arg1, T2 && arg2, TraitsArgs&&... args) {
-    return Traits_ST_t{arg1, arg2, args...};
+  template <class... TensorArgs>
+  static constexpr auto with(Tensor<TensorArgs...> const &tensor) {
+    return Traits_ST_t{tensor};
+  }
+
+  template<class T0, class T1, class... Ts>
+  static constexpr auto with(T0 && arg0, T1 && arg1, Ts&&... args) {
+      return Traits_ST_t{arg0, arg1, args...};
   }
 
 };
@@ -2057,7 +2080,7 @@ public:
   CUTE_HOST_DEVICE
   auto
   retile_D(DTensor&& dtensor) {
-    if constexpr (TiledCopy::is_nkl) {
+    if constexpr (!TiledCopy::is_convention_MN) {
       return retile_D_nkl(dtensor);
     } else {
       return retile_D_mkl(dtensor);

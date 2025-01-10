@@ -118,11 +118,11 @@ struct copy_op<dtype, load, store, M, N, false> {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_xe_2d_copy(
-        Copy_Atom<Copy_Traits<load>, dtype>{}.with(device_src.data(), M, N),
+        Copy_Atom<Copy_Traits<load, decltype(S)>, dtype>{}.with(device_src.data(), M, N),
         Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
 
     auto tiled_store = make_xe_2d_copy(
-        Copy_Atom<Copy_Traits<store>, dtype>{}.with(device_output.data(), M, N),
+        Copy_Atom<Copy_Traits<store, decltype(D)>, dtype>{}.with(device_output.data(), M, N),
         Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
 
     auto blockDim = syclcompat::dim3(size(tiled_load));
@@ -170,12 +170,10 @@ struct copy_op<char, load, XE_2D_U8x2x32_ST_N, M, N, false> {
                     make_layout(Shape<Int<M>, Int<N>>{}, Stride<Int<N>, _1>{}));
 
     auto tiled_load = make_xe_2d_copy(
-        Copy_Atom<Copy_Traits<load>, dtype>{}.with(device_src.data(), M, N),
-        Layout<Shape<_1, _16>>{});
+        Copy_Atom<Copy_Traits<load, decltype(S)>, dtype>{}.with(S), Layout<Shape<_1, _16>>{});
 
     auto tiled_store = make_xe_2d_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N>, dtype>{}.with(
-            device_output.data(), M, N), Layout<Shape<_1, _16>>{});
+        Copy_Atom<Copy_Traits<XE_2D_U8x2x32_ST_N, decltype(D)>, dtype>{}.with(D), Layout<Shape<_1, _16>>{});
 
     auto blockDim = syclcompat::dim3(size(tiled_load));
     //
@@ -222,10 +220,10 @@ struct copy_op<uint16_t, load, XE_2D_U16x2x16_ST_N, M, N, false> {
         make_layout(Shape<Int<M * 2>, Int<N / 2>>{}, Stride<Int<N / 2>, _1>{}));
 
     auto tiled_load = make_xe_2d_copy(
-        Copy_Atom<Copy_Traits<load>, dtype>{}.with(device_src.data(), M, N),
+        Copy_Atom<Copy_Traits<load, decltype(S)>, dtype>{}.with(device_src.data(), M, N),
         Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
     auto tiled_store = make_xe_2d_copy(
-        Copy_Atom<Copy_Traits<XE_2D_U16x2x16_ST_N>, uint16_t>{}.with(
+        Copy_Atom<Copy_Traits<XE_2D_U16x2x16_ST_N, decltype(D)>, uint16_t>{}.with(
             device_output.data(), M * 2, N / 2), Layout<Shape<_1, _16>>{});
     auto blockDim = syclcompat::dim3(size(tiled_load));
     //
@@ -275,10 +273,10 @@ struct copy_op<uint32_t, load, store, M, N, true> {
                     make_layout(Shape<Int<N>, Int<M>>{}, Stride<Int<M>, _1>{}));
 
     auto tiled_load = make_xe_2d_copy(
-        Copy_Atom<Copy_Traits<load>, dtype>{}.with(device_src.data(), M, N),
+        Copy_Atom<Copy_Traits<load, decltype(S)>, dtype>{}.with(device_src.data(), M, N),
         Layout<Shape<Int<SUBGROUP_SIZE>, _1>>{});
     auto tiled_store = make_xe_2d_copy(
-        Copy_Atom<Copy_Traits<store>, dtype>{}.with(device_output.data(), N, M),
+        Copy_Atom<Copy_Traits<store, decltype(D)>, dtype>{}.with(device_output.data(), N, M),
         Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
     auto blockDim = syclcompat::dim3(size(tiled_load));
     //

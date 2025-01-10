@@ -37,7 +37,7 @@ TEST(PVC_CuTe_Xe, gemm_RowMajor_RowMajor) {
       256, 128, 32, 64, 128, bfloat16_t, bfloat16_t, float,
       XE_2D_U16x16x32_LD_N, XE_2D_U16x32x32_LD_V,
       XE_2D_U32x8x16_ST_N, XE_8x16x16_F32BF16BF16F32_TT,
-      RowMajor, RowMajor>>(
+      cute::LayoutRight, cute::LayoutLeft>>(
       512, 256, 1024);
 }
 
@@ -46,16 +46,16 @@ TEST(PVC_CuTe_Xe, gemm_RowMajor_ColumnMajor) {
       64, 128, 32, 64, 128, bfloat16_t, bfloat16_t, float,
       XE_2D_U16x16x32_LD_N, XE_2D_U16x16x16_LD_T,
       XE_2D_U32x8x16_ST_N, XE_8x16x16_F32BF16BF16F32_TT,
-      RowMajor, ColumnMajor>>(
+      cute::LayoutRight, cute::LayoutRight>>(
       128, 256, 512);
 }
 
 TEST(PVC_CuTe_Xe, gemm_ColumnMajor_RowMajor) {
   run<gemm_device_partition_fragment_abc<
       256, 128, 32, 64, 128, bfloat16_t, bfloat16_t, float,
-      XE_2D_U16x16x8_LD_T, XE_2D_U16x32x32_LD_V,
+      XE_2D_U16x16x16_LD_T, XE_2D_U16x32x32_LD_V,
       XE_2D_U32x8x16_ST_N, XE_8x16x16_F32BF16BF16F32_TT,
-      ColumnMajor, RowMajor>>(
+      cute::LayoutLeft, cute::LayoutLeft>>(
       256, 512, 1024);
 }
 
@@ -64,6 +64,6 @@ TEST(PVC_CuTe_Xe, gemm_ColumnMajor_ColumnMajor) {
       128, 128, 32, 64, 128, bfloat16_t, bfloat16_t, float,
       XE_2D_U16x16x16_LD_T, XE_2D_U16x16x16_LD_T,
       XE_2D_U32x8x16_ST_N, XE_8x16x16_F32BF16BF16F32_TT,
-      ColumnMajor, ColumnMajor>>(
+      cute::LayoutLeft, cute::LayoutRight>>(
       256, 512, 1024);
 }
