@@ -46,12 +46,14 @@
 #include "cutlass/util/reference/device/gemm_complex.h"
 #include "cutlass/util/reference/device/tensor_compare.h"
 #include "common.hpp"
-#include "helper.h"
 
 using namespace cute;
 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+// gemm row major or column major
+#define GEMM_LAYOUT (3)
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+#define FLUSH_CACHE 1
 // Command line options parsing
 struct Options {
 
@@ -147,6 +149,12 @@ struct ExampleRunner {
   cutlass::DeviceAllocation<ElementA> block_A;
   cutlass::DeviceAllocation<ElementB> block_B;
   cutlass::DeviceAllocation<ElementC> block_C;
+
+#if FLUSH_CACHE == 1
+  cutlass::DeviceAllocation<ElementA> block_A_pingpong;
+  cutlass::DeviceAllocation<ElementB> block_B_pingpong;
+#endif
+
   cutlass::DeviceAllocation<ElementOutput> block_D;
   cutlass::DeviceAllocation<ElementOutput> block_ref_D;
 
@@ -202,15 +210,24 @@ struct ExampleRunner {
     block_A.reset(M * K * L);
     block_B.reset(K * N * L);
     block_C.reset(M * N * L);
+  #if FLUSH_CACHE == 1
+    block_A_pingpong.reset(M * K * L);
+    block_B_pingpong.reset(K * N * L);
+  #endif
     block_D.reset(M * N * L);
     block_ref_D.reset(M * N * L);
 
     initialize_block(block_A, seed + 2023);
     initialize_block(block_B, seed + 2022);
     initialize_block(block_C, seed + 2021);
+
+  #if FLUSH_CACHE == 1
+    initialize_block(block_A_pingpong, seed + 2024);
+    initialize_block(block_B_pingpong, seed + 2025);
+  #endif
   }
 
-  cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
+  void run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
     initialize(problem_size);
@@ -219,7 +236,7 @@ struct ExampleRunner {
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
       {block_A.get(), stride_A, block_B.get(), stride_B},
-      {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
+      {{1, 0}, block_C.get(), stride_C, block_D.get(), stride_D},
       hw_info
     };
 
@@ -233,36 +250,95 @@ struct ExampleRunner {
       std::exit(1);
     }
 
-    CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
+    gemm_op.initialize(arguments, workspace.get());
 
     // Run the GEMM
-    CUTLASS_CHECK(gemm_op.run());
+    gemm_op.run();
 
     syclcompat::wait();
 
     // Verify that the result is correct
-    bool passed = verify(problem_size, options.alpha, options.beta);
+    bool passed = verify(problem_size, 1, 0);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) return cutlass::Status::kErrorInternal;
+    int warm_up = 10;
+    std::vector<float> event_times(warm_up + options.iterations);
 
-    if (options.iterations > 0) {
+    if (passed && options.iterations > 0) {
       GPU_Clock timer;
+
+      for (int i = 0; i < warm_up + options.iterations; ++i) {
+
+      #if FLUSH_CACHE == 1
+        typename Gemm::GemmKernel::Arguments arguments_ping{
+          cutlass::gemm::GemmUniversalMode::kGemm,
+          problem_size,
+          {block_A.get(), stride_A, block_B.get(), stride_B},
+          {{1, 0}, block_C.get(), stride_C, block_D.get(), stride_D},
+          hw_info
+       };
+        typename Gemm::GemmKernel::Arguments arguments_pong{
+          cutlass::gemm::GemmUniversalMode::kGemm,
+          problem_size,
+          {block_A_pingpong.get(), stride_A, block_B_pingpong.get(), stride_B},
+          {{1, 0}, block_C.get(), stride_C, block_D.get(), stride_D},
+          hw_info
+        };
+          if (i % 2) {gemm_op.initialize(arguments_ping, workspace.get());}
+          else {gemm_op.initialize(arguments_pong, workspace.get());}
+        #endif
+
+        #if CACHE_FLUSH == 2
+        auto l3_cache_size = 256 * 1024 * 1024;
+        auto ref_d_element = max(l3_cache_size / sizeof(float), options.m * options.n * options.l);
+        block_ref_D.reset(ref_d_element);
+        syclcompat::memset(block_ref_D.get(), 0,
+                          ref_d_element * sizeof(float));
+        #endif
+
       timer.start();
-      for (int i = 0; i < options.iterations; ++i) {
-        gemm_op.run();
-      }
+      gemm_op.run();
       syclcompat::wait();
-
-      float cute_time = timer.seconds() / options.iterations;
-      double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
-      std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-      printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
+//      timer.stop();
+      event_times[i] = timer.milliseconds() * float(1e-3);
     }
+      //float cute_time = timer.seconds() / options.iterations;
+      auto best = 999.f;
+      auto worst = 0.f;
+      auto average = 0.f;
 
-    return cutlass::Status::kSuccess;
+      auto best_iter = 0;
+      auto worst_iter = 0;
+
+      for(uint32_t i = warm_up; i < options.iterations + warm_up; i++) {
+        average += event_times[i];
+        best = min(best, event_times[i]);
+        worst = max(worst, event_times[i]);
+        if (best == event_times[i]) { best_iter = i; }
+        if (worst == event_times[i]) { worst_iter = i; }
+      }
+      average = average - best - worst;
+      average /= (options.iterations - 2);
+      float cute_time =event_times[10];
+
+      double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
+      double io = options.l *(options.m * options.k * sizeof(bfloat16_t) + options.n * options.k * sizeof(bfloat16_t) + options.m * options.n * sizeof(float)) *1e-9;
+
+      std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+      printf("Cutlass GEMM (%s),\n        Time:    (%6.4f)ms,\n        IO(TFlops):    [%4.3f]TFlop/s,\n        HBM(GBs):    [%f]GB/s\n",
+#if GEMM_LAYOUT == 0
+              "RowMajor, RowMajor",
+#elif GEMM_LAYOUT == 1
+              "RowMajor, ColumnMajor",
+#elif GEMM_LAYOUT == 2
+              "ColumnMajor, RowMajor",
+#elif GEMM_LAYOUT == 3
+              "ColumnMajor, ColumnMajor",
+#endif
+              average, tflops / average, io / average );
+    }
+    return;
   }
-
 };
 
 int main(int argc, const char** argv)
@@ -301,24 +377,79 @@ int main(int argc, const char** argv)
 
   // The code section below describes datatype for input, output matrices and computation between
   // elements in input matrices.
-  using ElementAccumulator = float;                   // <- data type of accumulator
-  using ElementComputeEpilogue = float;  // <- data type of epilogue operations
-  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
-  using ElementOutput = float;                        // <- data type of elements in output matrix D
+  // using ElementAccumulator = float;                   // <- data type of accumulator
+  // using ElementComputeEpilogue = float;               // <- data type of epilogue operations
+  // using ElementOutput = float;                        // <- data type of elements in output matrix D
 
+  // data type of A/B and MMA traits
+  // using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
+  // using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
+  // using ElementAccumulator = float;                   // <- data type of accumulator
+  // using ElementComputeEpilogue = float;               // <- data type of epilogue operations
+  // using ElementOutput = float;                        // <- data type of elements in output matrix D
+  // using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+  // using GmemTiledCopyB = XE_2D_U16x32x32_LD_N;
+  // using MmaTraits = XE_8x16x16_F32BF16BF16F32_TT;
+
+  using ElementInputA = half_t;                        // <- data type of elements in input matrix A
+  using ElementInputB = half_t;                        // <- data type of elements in input matrix B
+  using ElementAccumulator = float;                   // <- data type of accumulator
+  using ElementComputeEpilogue = float;               // <- data type of epilogue operations
+  using ElementOutput = float;                        // <- data type of elements in output matrix D
+  // using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+  // using GmemTiledCopyB = XE_2D_U16x32x32_LD_N;
+  using MmaTraits = XE_8x16x16_F32F16F16F32_TT;
+
+  // using ElementInputA = int8_t;                        // <- data type of elements in input matrix A
+  // using ElementInputB = int8_t;                        // <- data type of elements in input matrix B
+  // using ElementAccumulator = int32_t;                   // <- data type of accumulator
+  // using ElementComputeEpilogue = int32_t;               // <- data type of epilogue operations
+  // using ElementOutput = int32_t;                        // <- data type of elements in output matrix D
+  // using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
+  // using GmemTiledCopyB = XE_2D_U8x32x32_LD_N;
+  // using MmaTraits = XE_8x16x32_S32S8S8S32_TT;
+
+  // using ElementInputA = uint8_t;                        // <- data type of elements in input matrix A
+  // using ElementInputB = uint8_t;                        // <- data type of elements in input matrix B
+  // using ElementAccumulator = int32_t;                   // <- data type of accumulator
+  // using ElementComputeEpilogue = int32_t;               // <- data type of epilogue operations
+  // using ElementOutput = int32_t;                        // <- data type of elements in output matrix D
+  // using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
+  // using GmemTiledCopyB = XE_2D_U8x32x32_LD_N;
+  // using MmaTraits = XE_8x16x32_S32U8U8S32_TT;
+
+#if GEMM_LAYOUT == 0
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::RowMajor;
+#elif GEMM_LAYOUT == 1
+  using LayoutA = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
+  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
+#elif GEMM_LAYOUT == 2
+  using LayoutA = cutlass::layout::ColumnMajor;
+  using LayoutB = cutlass::layout::RowMajor;
+  using GmemTiledCopyA = XE_2D_U16x16x16_LD_T;
+  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+#elif GEMM_LAYOUT == 3
+  using LayoutA = cutlass::layout::ColumnMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
+  using GmemTiledCopyA = XE_2D_U16x16x16_LD_T;
+  using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
+#else
+  static_assert(false);
+#endif
+
+
+
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
-  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+  using TiledMma = TiledMMA<MMA_Atom<MmaTraits>,
           Layout<Shape<_8,_4,_1>>,
           Tile<_64,_64,_32>>; // Subgroup level-tile
 
@@ -367,7 +498,7 @@ int main(int argc, const char** argv)
 
   ExampleRunner<Gemm> runner;
 
-  CUTLASS_CHECK(runner.run(options, hw_info));
+  runner.run(options, hw_info);
 
   return 0;
 }

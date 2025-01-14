@@ -2035,7 +2035,7 @@ namespace detail
       using prefetch_atom = Copy_Atom<prefetch_trait, dtype>;
       return make_tiled_copy(prefetch_atom{}.with(static_cast<dtype const*>(ptr), width, height, pitch),
                                            Layout<Shape<_1, _16>>{},
-                                           Layout<Shape<_2, _2, _16>>{});
+                                           Layout<Shape<_16, _4>>{});
     }
     else if constexpr (get<0>(PrefetchTileSize{}) == 32) {
       using prefetch_trait = Copy_Traits<XE_2D_U8x32x64_LD_N>;
