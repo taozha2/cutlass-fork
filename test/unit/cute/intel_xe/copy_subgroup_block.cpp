@@ -75,14 +75,10 @@ void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N) {
   }
 #endif
 
-  using traits_load = Copy_Traits<XE_2D_U32x8x16_LD_N>;
+  using traits_load = Copy_Traits<XE_2D_U32x8x16_LD_N, decltype(S)>;
   using Atom_load = Copy_Atom<traits_load, Element>;
-  auto VecLayout =
-      make_layout(make_shape(get<0>(typename traits_load::BlockShape{}),
-                             get<1>(typename traits_load::BlockShape{}) / _16{}),
-                  Stride<_1, _0>{});
-  auto tiled_copy_load = make_xe_2d_copy(Atom_load{}.with(&*S.data(), M, N),
-                                         Layout<Shape<_1, _16>>{}, VecLayout);
+  auto tiled_copy_load = make_xe_2d_copy(Atom_load{}.with(S),
+                                         Layout<Shape<_1, _16>>{});
 
   // Construct a Tensor corresponding to each thread's slice.
   auto thr_copy_load =
@@ -123,12 +119,11 @@ void copy_kernel_vectorized(TensorS S, TensorD D, uint32_t M, uint32_t N) {
                                                    fragment.shape());
   copy(tiled_copy_load, blk_load_S, fragment);
 
-  using traits_store = Copy_Traits<XE_2D_U32x8x16_ST_N>;
+  using traits_store = Copy_Traits<XE_2D_U32x8x16_ST_N, decltype(D)>;
   using Atom_store = Copy_Atom<traits_store, Element>;
 
   auto tiled_copy_store =
-      make_xe_2d_copy(Atom_store{}.with(&*D.data(), M, N),
-                      Layout<Shape<_1, _16>, Stride<_0, _1>>{}, VecLayout);
+      make_xe_2d_copy(Atom_store{}.with(D), Layout<Shape<_1, _16>>{});
   auto thr_copy_store = tiled_copy_store.get_thread_slice(ThreadIdxX());
 
   Tensor thr_tile_store_D = thr_copy_store.partition_D(tile_sg_D);

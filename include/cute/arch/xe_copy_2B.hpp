@@ -38,13 +38,21 @@
 #ifdef __SYCL_DEVICE_ONLY__
 #define SYCL_DEVICE_BUILTIN(x) SYCL_EXTERNAL extern "C" x
 #else
-#define SYCL_DEVICE_BUILTIN(x) inline x { assert(false); }
+#define SYCL_DEVICE_BUILTIN(x)                                                 \
+  inline x {                                                                   \
+    CUTE_INVALID_CONTROL_PATH(                                                 \
+        "Attempting to use a device built-in in host code.");                  \
+  }
 #endif
 
 #ifdef __SYCL_DEVICE_ONLY__
 #define SYCL_DEVICE_OCL(x) SYCL_EXTERNAL x
 #else
-#define SYCL_DEVICE_OCL(x) inline x { assert(false); }
+#define SYCL_DEVICE_OCL(x)                                                     \
+  inline x {                                                                   \
+    CUTE_INVALID_CONTROL_PATH(                                                 \
+        "Attempting to use a device built-in in host code.");                  \
+  }
 #endif
 
 using namespace cute;
@@ -733,6 +741,8 @@ struct XE_2D_U16x16x8_LD_T {
   using BlockShape = Shape<_8, _16>;
   using inst_dtype = uint32_t;
 
+  static constexpr bool is_transpose = true;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -750,8 +760,10 @@ struct XE_2D_U16x16x8_LD_T {
 
 struct XE_2D_U16x16x16_LD_T {
   using BlockShape = Shape<_16, _16>;
-
   using inst_dtype = uint32_t;
+
+  static constexpr bool is_transpose = true;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,

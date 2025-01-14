@@ -110,6 +110,12 @@ public:
   static constexpr int PrefetchStrideA = static_cast<int>(get<1>(PrefetchATileSize{}));
   static constexpr int PrefetchStrideB = static_cast<int>(get<0>(PrefetchBTileSize{}));
 
+  using  TensorMKL = typename CollectiveMainloop::TensorMKL;
+  using  TensorNKL = typename CollectiveMainloop::TensorNKL;
+
+  using  TensorMK = decltype(TensorMKL{}(_, _, 0));
+  using  TensorNK = decltype(TensorNKL{}(_, _, 0));
+
   // Kernel level shared memory storage
   struct SharedStorage {
     using EpilogueTensorStorage = typename CollectiveEpilogue::TensorStorage;
@@ -130,6 +136,8 @@ public:
   struct Params {
     GemmUniversalMode mode;
     ProblemShape problem_shape;
+    TensorMK mA_mk;
+    TensorNK mB_nk;
     MainloopParams mainloop;
     EpilogueParams epilogue;
   };
@@ -138,15 +146,54 @@ public:
   // Methods
   //
 
+  static constexpr auto construct_mkl_tensor_A(Arguments const &args) {
+    using LayoutA = cutlass::detail::StrideToLayoutTagA_t<StrideA>;
+
+    auto [M, N, K, L] = args.problem_shape;
+
+    if constexpr (std::is_same_v<LayoutA, cutlass::layout::RowMajor>) {
+      return make_tensor(make_gmem_ptr(static_cast<ElementA const*>(args.mainloop.ptr_A)),
+                            make_layout(make_shape(M,K,L),make_stride((int64_t)K, _1{}, (int64_t)M * K)));
+    } else {
+      return make_tensor(make_gmem_ptr(static_cast<ElementA const*>(args.mainloop.ptr_A)),
+                            make_layout(make_shape(M,K,L), make_stride(_1{}, (int64_t)M, (int64_t)M * K)));
+    }
+  }
+
+  static constexpr auto construct_nkl_tensor_B(Arguments const &args) {
+    using LayoutB = cutlass::detail::StrideToLayoutTagB_t<StrideB>;
+
+    auto [M, N, K, L] = args.problem_shape;
+
+    if constexpr (std::is_same_v<LayoutB, cutlass::layout::RowMajor>) {
+      return make_tensor(make_gmem_ptr(static_cast<ElementB const*>(args.mainloop.ptr_B)),
+                            make_layout(make_shape(N,K,L), make_stride(_1{}, (int64_t)N, (int64_t)N * K)));
+    } else {
+      return make_tensor(make_gmem_ptr(static_cast<ElementB const*>(args.mainloop.ptr_B)),
+                            make_layout(make_shape(N,K,L), make_stride((int64_t)K, _1{}, (int64_t)N * K)));
+    }
+  }
+
   // Convert to underlying arguments. In this case, a simple copy for the aliased type.
   static
   Params
   to_underlying_arguments(Arguments const& args, void* workspace) {
     (void) workspace;
+
+    auto mA_mkl = construct_mkl_tensor_A(args);
+    auto mB_nkl = construct_nkl_tensor_B(args);
+
+    auto l_coord = BlockIdxZ();
+
+    Tensor mA_mk = mA_mkl(_,_,l_coord);
+    Tensor mB_nk = mB_nkl(_,_,l_coord);
+
     return {
       args.mode,
       args.problem_shape,
-      CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace),
+      mA_mk,
+      mB_nk,
+      CollectiveMainloop::to_underlying_arguments(mA_mkl, mB_nkl, workspace),
       CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace)
     };
   }
@@ -234,18 +281,14 @@ public:
     auto n_coord = BlockIdxX();
     #endif
     auto l_coord = BlockIdxZ();
-    auto blk_coord_mnkl = make_coord(m_coord, n_coord, _, l_coord);  
+
+    auto blk_coord_mnkl = make_coord(m_coord, n_coord, _, l_coord);
     int sub_group_id = thread_idx / SubgroupSize;
     constexpr auto workgroup_shape = WorkgroupTileShape{};                                                  // (SUB_M,SUB_N,SUB_K)
     constexpr auto subgroup_shape = SubgroupTileShape{};                   
 
-    Tensor mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(M,K,L), StrideA{});   //(m,k,l)
-    Tensor mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(N,K,L), StrideB{});   //(n,k,l)
-    Tensor mA_mk = mA_mkl(_,_,l_coord);                                                                        // (m,k)
-    Tensor mB_nk = mB_nkl(_,_,l_coord);                                                                        // (n,k)
-
-    auto gA = local_tile(mA_mk, blk_shape, take<0, 3>(blk_coord_mnkl), Step<_1,  X, _1>{});
-    auto gB = local_tile(mB_nk, blk_shape, take<0, 3>(blk_coord_mnkl), Step< X, _1, _1>{});
+    auto gA = local_tile(params.mA_mk, blk_shape, take<0, 3>(blk_coord_mnkl), Step<_1,  X, _1>{});
+    auto gB = local_tile(params.mB_nk, blk_shape, take<0, 3>(blk_coord_mnkl), Step< X, _1, _1>{});
 
     // Compute tile residues for predication
     auto m_max_coord = M - get<0>(subgroup_shape) * m_coord;                             // M - SUB_M * m_coord

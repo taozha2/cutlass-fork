@@ -54,11 +54,11 @@ struct gemm_device_partition_sd {
 
     // Represent the full tensors
     Tensor mA = make_tensor(make_gmem_ptr(A),
-                            make_layout(make_shape(m, k), make_stride(k, 1)));
+                            make_layout(make_shape(m, k), cute::LayoutRight{}));
     Tensor mB = make_tensor(make_gmem_ptr(B),
-                            make_layout(make_shape(n, k), make_stride(1, n)));
+                            make_layout(make_shape(n, k), cute::LayoutLeft{}));
     Tensor mC = make_tensor(make_gmem_ptr(C),
-                            make_layout(make_shape(m, n), make_stride(n, 1)));
+                            make_layout(make_shape(m, n), cute::LayoutRight{}));
 
     // Get the appropriate blocks for this thread block
     auto cta_coord = make_coord(BlockIdxX(), BlockIdxY(), _); // (m,n,k)
@@ -81,29 +81,21 @@ struct gemm_device_partition_sd {
         local_tile(gC, make_shape(Int<sg_tile_m>{}, Int<sg_tile_n>{}),
                    make_coord(sg_id / sg_per_wg_x, sg_id % sg_per_wg_x));
 
-    using traits_load_A = Copy_Traits<traits_a>;
+    using traits_load_A = Copy_Traits<traits_a, decltype(mA)>;
     using atom_load_A = Copy_Atom<traits_load_A, TA>;
     TiledCopy copy_a = make_xe_2d_copy(
-        atom_load_A{}.with(A, m, k), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{},
-        make_layout(make_shape(get<0>(typename traits_load_A::BlockShape{}),
-                               get<1>(typename traits_load_A::BlockShape{}) /
-                                   Int<SUBGROUP_SIZE>{})));
+        atom_load_A{}.with(mA), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
 
-    using traits_load_B = Copy_Traits<traits_b, ShapeNKL>;
+    using traits_load_B = Copy_Traits<traits_b, decltype(mB)>;
     using atom_load_B = Copy_Atom<traits_load_B, TB>;
     TiledCopy copy_b = make_xe_2d_copy(
-        atom_load_B{}.with(B, n, k), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{},
-        make_layout(make_shape(get<0>(typename traits_load_B::BlockShape{}),
-                               get<1>(typename traits_load_B::BlockShape{}) /
-                                   Int<SUBGROUP_SIZE>{})));
-    using traits_store_C = Copy_Traits<traits_c>;
+        atom_load_B{}.with(mB), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
+
+    using traits_store_C = Copy_Traits<traits_c, decltype(mC)>;
     using atom_store_C = Copy_Atom<traits_store_C, TC>;
     TiledCopy copy_c = make_xe_2d_copy(
-        atom_store_C{}.with(C, m, n, n),
-        Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{},
-        make_layout(make_shape(get<0>(typename traits_store_C::BlockShape{}),
-                               get<1>(typename traits_store_C::BlockShape{}) /
-                                   Int<SUBGROUP_SIZE>{})));
+        atom_store_C{}.with(mC), Layout<Shape<_1, Int<SUBGROUP_SIZE>>>{});
+
     TiledMMA mma = make_tiled_mma(
         MMA_Atom<traits_mma>{},
         Layout<Shape<Int<cute::ceil_div(wg_tile_m, sg_tile_m)>,

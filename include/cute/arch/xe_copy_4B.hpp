@@ -37,13 +37,21 @@
 #ifdef __SYCL_DEVICE_ONLY__
 #define SYCL_DEVICE_BUILTIN(x) SYCL_EXTERNAL extern "C" x
 #else
-#define SYCL_DEVICE_BUILTIN(x) inline x { assert(false); }
+#define SYCL_DEVICE_BUILTIN(x)                                                 \
+  inline x {                                                                   \
+    CUTE_INVALID_CONTROL_PATH(                                                 \
+        "Attempting to use a device built-in in host code.");                  \
+  }
 #endif
 
 #ifdef __SYCL_DEVICE_ONLY__
 #define SYCL_DEVICE_OCL(x) SYCL_EXTERNAL x
 #else
-#define SYCL_DEVICE_OCL(x) inline x { assert(false); }
+#define SYCL_DEVICE_OCL(x)                                                     \
+  inline x {                                                                   \
+    CUTE_INVALID_CONTROL_PATH(                                                 \
+        "Attempting to use a device built-in in host code.");                  \
+  }
 #endif
 
 enum class CacheControl {
@@ -372,6 +380,8 @@ struct XE_2D_U32x32x16_LD_N {
 };
 
 struct XE_2D_TF32x1x8_LD_N {
+  using BlockShape = Shape<_32, _16>;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -388,6 +398,9 @@ struct XE_2D_TF32x1x8_LD_N {
 };
 
 struct XE_2D_TF32x2x8_LD_N {
+  using BlockShape = Shape<_2, _8>;
+  using ValueShape = Shape<_1, _16>;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -404,6 +417,9 @@ struct XE_2D_TF32x2x8_LD_N {
 };
 
 struct XE_2D_TF32x4x8_LD_N {
+  using BlockShape = Shape<_4, _8>;
+  using ValueShape = Shape<_2, _16>;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -420,6 +436,9 @@ struct XE_2D_TF32x4x8_LD_N {
 };
 
 struct XE_2D_TF32x8x8_LD_N {
+  using BlockShape = Shape<_8, _8>;
+  using ValueShape = Shape<_4, _16>;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -436,6 +455,9 @@ struct XE_2D_TF32x8x8_LD_N {
 };
 
 struct XE_2D_TF32x16x8_LD_N {
+  using BlockShape = Shape<_16, _8>;
+  using ValueShape = Shape<_8, _16>;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -452,6 +474,9 @@ struct XE_2D_TF32x16x8_LD_N {
 };
 
 struct XE_2D_TF32x32x8_LD_N {
+  using BlockShape = Shape<_32, _8>;
+  using ValueShape = Shape<_16, _16>;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -468,6 +493,8 @@ struct XE_2D_TF32x32x8_LD_N {
 };
 
 struct XE_2D_TF32x1x16_LD_N {
+  using BlockShape = Shape<_1, _16>;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -484,6 +511,9 @@ struct XE_2D_TF32x1x16_LD_N {
 };
 
 struct XE_2D_TF32x2x16_LD_N {
+  using BlockShape = Shape<_2, _16>;
+  using ValueShape = Shape<_1, _32>;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -500,6 +530,9 @@ struct XE_2D_TF32x2x16_LD_N {
 };
 
 struct XE_2D_TF32x4x16_LD_N {
+  using BlockShape = Shape<_4, _16>;
+  using ValueShape = Shape<_2, _32>;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -516,6 +549,9 @@ struct XE_2D_TF32x4x16_LD_N {
 };
 
 struct XE_2D_TF32x8x16_LD_N {
+  using BlockShape = Shape<_8, _16>;
+  using ValueShape = Shape<_4, _32>;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -532,6 +568,9 @@ struct XE_2D_TF32x8x16_LD_N {
 };
 
 struct XE_2D_TF32x16x16_LD_N {
+  using BlockShape = Shape<_16, _16>;
+  using ValueShape = Shape<_8, _32>;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -548,6 +587,9 @@ struct XE_2D_TF32x16x16_LD_N {
 };
 
 struct XE_2D_TF32x32x16_LD_N {
+  using BlockShape = Shape<_32, _16>;
+  using ValueShape = Shape<_16, _32>;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -565,6 +607,8 @@ struct XE_2D_TF32x32x16_LD_N {
 
 
 struct XE_2D_U32x16x1_LD_T {
+  static constexpr bool is_transpose = true;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -582,6 +626,8 @@ struct XE_2D_U32x16x1_LD_T {
 
 struct XE_2D_U32x16x2_LD_T {
   using BlockShape = Shape<_2, _16>;
+
+  static constexpr bool is_transpose = true;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -601,6 +647,8 @@ struct XE_2D_U32x16x2_LD_T {
 struct XE_2D_U32x16x4_LD_T {
   using BlockShape = Shape<_4, _16>;
 
+  static constexpr bool is_transpose = true;
+
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
                                     int height, int pitch, intel::coord_t coord,
@@ -618,6 +666,8 @@ struct XE_2D_U32x16x4_LD_T {
 
 struct XE_2D_U32x16x8_LD_T {
   using BlockShape = Shape<_8, _16>;
+
+  static constexpr bool is_transpose = true;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,

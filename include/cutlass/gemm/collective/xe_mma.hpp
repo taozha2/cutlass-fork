@@ -127,15 +127,18 @@ struct CollectiveMma<
   
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
 
-  using traits_load_A = Copy_Traits<GmemTiledCopyA, cute::detail::ShapeMKL, StrideA>;
+  using traits_load_A = Copy_Traits<GmemTiledCopyA, StrideA>;
   using atom_load_A = Copy_Atom<traits_load_A, ElementA>;
 
-  using traits_load_B = Copy_Traits<GmemTiledCopyB, cute::detail::ShapeNKL, StrideB>;
+  using traits_load_B = Copy_Traits<GmemTiledCopyB, StrideB>;
   using atom_load_B = Copy_Atom<traits_load_B, ElementB>;
 
   using XE_Prefetch_A = decltype(cute::detail::prefetch_selector<PrefetchATileSize, ElementA>());
   using XE_Prefetch_B = decltype(cute::detail::prefetch_selector<PrefetchBTileSize, ElementB>());
 
+  using  TensorMKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementA const*>(nullptr)), make_shape(0,0,0), StrideA{}));   //(m, k)
+  using  TensorNKL = decltype(make_tensor(make_gmem_ptr(static_cast<ElementB const*>(nullptr)), make_shape(0,0,0), StrideB{}));   //(n, k)
+ 
   // Host side kernel arguments
   struct Arguments {
     ElementA const* ptr_A;
@@ -145,10 +148,8 @@ struct CollectiveMma<
   };
 
   struct Params {
-    int M;
-    int N;
-    int K;
-    Arguments args;
+    TensorMKL tensorA;
+    TensorNKL tensorB;
   };
 
   //
@@ -157,13 +158,11 @@ struct CollectiveMma<
 
   CollectiveMma() = default;
 
-  template <class ProblemShape>
   static constexpr Params
-  to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
+  to_underlying_arguments(TensorMKL const & tensorA, TensorNKL const &tensorB, void* workspace) {
     (void) workspace;
-    auto [M, N, K, L] = problem_shape;
 
-    return Params{M, N, K, args};
+    return Params{tensorA, tensorB};
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
@@ -199,18 +198,10 @@ struct CollectiveMma<
     (void)thread_idx;
     (void)smem_buf;
 
-    auto M = mainloop.M;
-    auto N = mainloop.N;
-    auto K = mainloop.K;
-
-    auto gmem_tiled_copy_a = make_xe_2d_copy(atom_load_A{}.with(mainloop.args.ptr_A, M, K),
-                                             Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                             make_layout(make_shape(get<0>(typename atom_load_A::BlockShape{}),
-                                                                    get<1>(typename atom_load_A::BlockShape{}) / Int<SubgroupSize>{})));
-    auto gmem_tiled_copy_b = make_xe_2d_copy(atom_load_B{}.with(mainloop.args.ptr_B, N, K),
-                                             Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                             make_layout(make_shape(get<0>(typename atom_load_B::BlockShape{}),
-                                                                    get<1>(typename atom_load_B::BlockShape{}) / Int<SubgroupSize>{})));
+    auto gmem_tiled_copy_a = make_xe_2d_copy(atom_load_A{}.with(mainloop.tensorA),
+                                             Layout<Shape<_1, Int<SubgroupSize>>>{});
+    auto gmem_tiled_copy_b = make_xe_2d_copy(atom_load_B{}.with(mainloop.tensorB),
+                                             Layout<Shape<_1, Int<SubgroupSize>>>{});
 
     // Instantiate the MMA object
     TiledMma tiled_mma;
