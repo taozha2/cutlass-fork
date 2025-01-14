@@ -43,26 +43,14 @@ namespace detail {
 static constexpr auto subgroup_size = 16;
 
 // ==========  size_of_inst  ==========
-template <class, class = void>
-static constexpr bool has_inst_dtype = false;
-
-template <class T>
-static constexpr bool has_inst_dtype<T, cute::void_t<typename T::inst_dtype>> = true;
-
 template <class T, class dtype, class = void>
 static constexpr auto size_of_inst = sizeof(dtype);
 
 template <class T, class dtype>
-static constexpr auto size_of_inst<T, dtype, std::enable_if_t<has_inst_dtype<T>>> = sizeof(typename T::inst_dtype);
+static constexpr auto size_of_inst<T, dtype, cute::void_t<typename T::inst_dtype>> = sizeof(typename T::inst_dtype);
 
 
 // ==========  value_layout_t  ==========
-template <class, class = void>
-static constexpr bool has_dst_shape = false;
-
-template <class T>
-static constexpr bool has_dst_shape<T, cute::void_t<typename T::ValueShape>> = true;
-
 template <class T, class = void>
 struct value_layout_t {
   using type = decltype(make_layout(make_shape(get<0>(typename T::BlockShape{}),
@@ -71,7 +59,7 @@ struct value_layout_t {
 };
 
 template <class T>
-struct value_layout_t<T, std::enable_if_t<has_dst_shape<T>>> {
+struct value_layout_t<T, cute::void_t<typename T::ValueShape>> {
   using type = decltype(make_layout(make_shape(get<0>(typename T::ValueShape{}),
                                                             get<1>(typename T::ValueShape{})
                                                                 / Int<detail::subgroup_size>{})));
@@ -83,7 +71,7 @@ template <class, class = void>
 static constexpr bool is_transpose_load = false;
 
 template <class T>
-static constexpr bool is_transpose_load<T, std::void_t<std::bool_constant<T::is_transpose>>> = T::is_transpose;
+static constexpr bool is_transpose_load<T, cute::void_t<std::bool_constant<T::is_transpose>>> = T::is_transpose;
 
 
 // ==========  is_stride_leftmost  ==========
