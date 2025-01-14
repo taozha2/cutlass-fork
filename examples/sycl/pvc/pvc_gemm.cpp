@@ -381,15 +381,32 @@ int main(int argc, const char** argv)
   using ElementComputeEpilogue = float;  // <- data type of epilogue operations
   using ElementOutput = float;                        // <- data type of elements in output matrix D
 
-  // data type of A/B
-  using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
-  using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
+  // data type of A/B and MMA traits
+  // using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
+  // using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
+  // using MmaTraits = XE_8x16x16_F32BF16BF16F32_TT;
+
+  using ElementInputA = half_t;                        // <- data type of elements in input matrix A
+  using ElementInputB = half_t;                        // <- data type of elements in input matrix B
+  using MmaTraits = XE_8x16x16_F32F16F16F32_TT;
+
+  // using ElementInputA = int8_t;                        // <- data type of elements in input matrix A
+  // using ElementInputB = int8_t;                        // <- data type of elements in input matrix B
+  // using MmaTraits = XE_8x16x32_S32S8S8S32_TT;
+
+  // using ElementInputA = uint8_t;                        // <- data type of elements in input matrix A
+  // using ElementInputB = uint8_t;                        // <- data type of elements in input matrix B
+  // using MmaTraits = XE_8x16x32_S32U8U8S32_TT;
+
+  // using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
+  // using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
+  // using MmaTraits = XE_8x16x16_F32BF16BF16F32_TT;
 
 #if GEMM_LAYOUT == 0
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::RowMajor;
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+  using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
+  using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
 #elif GEMM_LAYOUT == 1
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::ColumnMajor;
@@ -418,7 +435,7 @@ int main(int argc, const char** argv)
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
 
-  using TiledMma = TiledMMA<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>,
+  using TiledMma = TiledMMA<MMA_Atom<MmaTraits>,
           Layout<Shape<_8,_4,_1>>,
           Tile<_64,_64,_32>>; // Subgroup level-tile
 
