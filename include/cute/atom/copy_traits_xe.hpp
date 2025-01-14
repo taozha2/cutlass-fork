@@ -80,16 +80,10 @@ struct value_layout_t<T, std::enable_if_t<has_dst_shape<T>>> {
 
 // ==========  is_transpose_load  ==========
 template <class, class = void>
-static constexpr bool has_is_transpose = false;
-
-template <class T>
-static constexpr bool has_is_transpose<T, cute::void_t<decltype(T::is_transpose)>> = true;
-
-template <class, class = void>
 static constexpr bool is_transpose_load = false;
 
 template <class T>
-static constexpr bool is_transpose_load<T, std::enable_if_t<has_is_transpose<T>>> = T::is_transpose;
+static constexpr bool is_transpose_load<T, std::void_t<std::bool_constant<T::is_transpose>>> = T::is_transpose;
 
 
 // ==========  is_stride_leftmost  ==========
