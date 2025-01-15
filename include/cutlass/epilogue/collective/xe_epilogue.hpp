@@ -331,8 +331,6 @@ public:
 
     Tensor tRS_cD = make_counting_tensor(tRS_cD_mn.layout());                          // (G2R,G2R_M,G2R_N,EPI_M,EPI_N)
 
-    Tensor rw_coord = tOuti(_,_,_,l_coord);
-
     // Get the fusion callbacks
     // Arguments passed here relate to sub-group tiles, rather than CTA (work-group) tiles
     constexpr bool RefSrc = true;
