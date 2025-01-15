@@ -49,9 +49,6 @@
 
 using namespace cute;
 
-// gemm row major or column major
-#define GEMM_LAYOUT (3)
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 #define FLUSH_CACHE 1
 // Command line options parsing
@@ -325,23 +322,17 @@ struct ExampleRunner {
       double io = options.l *(options.m * options.k * sizeof(bfloat16_t) + options.n * options.k * sizeof(bfloat16_t) + options.m * options.n * sizeof(float)) *1e-9;
 
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-      printf("Cutlass GEMM (%s),\n        Time:    (%6.4f)ms,\n        IO(TFlops):    [%4.3f]TFlop/s,\n        HBM(GBs):    [%f]GB/s\n",
-#if GEMM_LAYOUT == 0
-              "RowMajor, RowMajor",
-#elif GEMM_LAYOUT == 1
-              "RowMajor, ColumnMajor",
-#elif GEMM_LAYOUT == 2
-              "ColumnMajor, RowMajor",
-#elif GEMM_LAYOUT == 3
-              "ColumnMajor, ColumnMajor",
-#endif
+      printf("Cutlass GEMM,\n        Time:    (%6.4f)ms,\n        IO(TFlops):    [%4.3f]TFlop/s,\n        HBM(GBs):    [%f]GB/s\n",
               average, tflops / average, io / average );
     }
     return;
   }
 };
 
-int main(int argc, const char** argv)
+template <class GmemTiledCopyA, class GmemTiledCopyB, class MmaTraits,
+          class ElementInputA, class ElementInputB, class ElementOutput,
+          class LayoutA, class LayoutB>
+int run_gemm(int argc, const char** argv)
 {
   //
   // Parse options
@@ -375,76 +366,11 @@ int main(int argc, const char** argv)
 
   bool passed;
 
-  // The code section below describes datatype for input, output matrices and computation between
-  // elements in input matrices.
-  // using ElementAccumulator = float;                   // <- data type of accumulator
-  // using ElementComputeEpilogue = float;               // <- data type of epilogue operations
-  // using ElementOutput = float;                        // <- data type of elements in output matrix D
-
-  // data type of A/B and MMA traits
-  // using ElementInputA = bfloat16_t;                        // <- data type of elements in input matrix A
-  // using ElementInputB = bfloat16_t;                        // <- data type of elements in input matrix B
-  // using ElementAccumulator = float;                   // <- data type of accumulator
-  // using ElementComputeEpilogue = float;               // <- data type of epilogue operations
-  // using ElementOutput = float;                        // <- data type of elements in output matrix D
-  // using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  // using GmemTiledCopyB = XE_2D_U16x32x32_LD_N;
-  // using MmaTraits = XE_8x16x16_F32BF16BF16F32_TT;
-
-  using ElementInputA = half_t;                        // <- data type of elements in input matrix A
-  using ElementInputB = half_t;                        // <- data type of elements in input matrix B
-  using ElementAccumulator = float;                   // <- data type of accumulator
-  using ElementComputeEpilogue = float;               // <- data type of epilogue operations
-  using ElementOutput = float;                        // <- data type of elements in output matrix D
-  // using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  // using GmemTiledCopyB = XE_2D_U16x32x32_LD_N;
-  using MmaTraits = XE_8x16x16_F32F16F16F32_TT;
-
-  // using ElementInputA = int8_t;                        // <- data type of elements in input matrix A
-  // using ElementInputB = int8_t;                        // <- data type of elements in input matrix B
-  // using ElementAccumulator = int32_t;                   // <- data type of accumulator
-  // using ElementComputeEpilogue = int32_t;               // <- data type of epilogue operations
-  // using ElementOutput = int32_t;                        // <- data type of elements in output matrix D
-  // using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
-  // using GmemTiledCopyB = XE_2D_U8x32x32_LD_N;
-  // using MmaTraits = XE_8x16x32_S32S8S8S32_TT;
-
-  // using ElementInputA = uint8_t;                        // <- data type of elements in input matrix A
-  // using ElementInputB = uint8_t;                        // <- data type of elements in input matrix B
-  // using ElementAccumulator = int32_t;                   // <- data type of accumulator
-  // using ElementComputeEpilogue = int32_t;               // <- data type of epilogue operations
-  // using ElementOutput = int32_t;                        // <- data type of elements in output matrix D
-  // using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
-  // using GmemTiledCopyB = XE_2D_U8x32x32_LD_N;
-  // using MmaTraits = XE_8x16x32_S32U8U8S32_TT;
-
-#if GEMM_LAYOUT == 0
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
-#elif GEMM_LAYOUT == 1
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::ColumnMajor;
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
-#elif GEMM_LAYOUT == 2
-  using LayoutA = cutlass::layout::ColumnMajor;
-  using LayoutB = cutlass::layout::RowMajor;
-  using GmemTiledCopyA = XE_2D_U16x16x16_LD_T;
-  using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
-#elif GEMM_LAYOUT == 3
-  using LayoutA = cutlass::layout::ColumnMajor;
-  using LayoutB = cutlass::layout::ColumnMajor;
-  using GmemTiledCopyA = XE_2D_U16x16x16_LD_T;
-  using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
-#else
-  static_assert(false);
-#endif
-
-
+  using ElementAccumulator = ElementOutput;                   // <- data type of accumulator
+  using ElementComputeEpilogue = ElementOutput;               // <- data type of epilogue operations
 
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
-
 
   // Workgroup-level tile
   using TileShape = Shape<_256, _256, _32>;
@@ -501,4 +427,77 @@ int main(int argc, const char** argv)
   runner.run(options, hw_info);
 
   return 0;
+}
+
+int main(int argc, const char** argv)
+{
+  // bfloat16
+  std::cout << "\n\n==========  bf16, RowMajor, RowMajor  ==========" << std::endl;
+  run_gemm<XE_2D_U16x32x32_LD_N, XE_2D_U16x32x32_LD_N, XE_8x16x16_F32BF16BF16F32_TT,
+           bfloat16_t, bfloat16_t, float, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
+
+  std::cout << "\n\n==========  bf16, RowMajor, ColumnMajor  ==========" << std::endl;
+  run_gemm<XE_2D_U16x32x32_LD_N, XE_2D_U16x16x16_LD_T, XE_8x16x16_F32BF16BF16F32_TT,
+           bfloat16_t, bfloat16_t, float, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
+
+  std::cout << "\n\n==========  bf16, ColumnMajor, RowMajor  ==========" << std::endl;
+  run_gemm<XE_2D_U16x16x16_LD_T, XE_2D_U16x32x32_LD_N, XE_8x16x16_F32BF16BF16F32_TT,
+           bfloat16_t, bfloat16_t, float, cutlass::layout::ColumnMajor, cutlass::layout::RowMajor>(argc, argv);
+
+  std::cout << "\n\n==========  bf16, ColumnMajor, ColumnMajor  ==========" << std::endl;
+  run_gemm<XE_2D_U16x16x16_LD_T, XE_2D_U16x16x16_LD_T, XE_8x16x16_F32BF16BF16F32_TT,
+           bfloat16_t, bfloat16_t, float, cutlass::layout::ColumnMajor, cutlass::layout::ColumnMajor>(argc, argv);
+
+  // int8
+  std::cout << "\n\n==========  int8, RowMajor, RowMajor  ==========" << std::endl;
+  run_gemm<XE_2D_U8x32x32_LD_N, XE_2D_U8x32x32_LD_V, XE_8x16x32_S32S8S8S32_TT,
+           int8_t, int8_t, int32_t, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
+
+  // uint8
+  std::cout << "\n\n==========  uint8, RowMajor, RowMajor  ==========" << std::endl;
+  run_gemm<XE_2D_U8x32x32_LD_N, XE_2D_U8x32x32_LD_V, XE_8x16x32_S32U8U8S32_TT,
+           uint8_t, uint8_t, int32_t, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
+
+  // fp16
+  std::cout << "\n\n==========  fp16, RowMajor, RowMajor  ==========" << std::endl;
+  run_gemm<XE_2D_U16x32x32_LD_N, XE_2D_U16x32x32_LD_N, XE_8x16x16_F32F16F16F32_TT,
+           half_t, half_t, float, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
+
+  std::cout << "\n\n==========  fp16, RowMajor, ColumnMajor  ==========" << std::endl;
+  run_gemm<XE_2D_U16x32x32_LD_N, XE_2D_U16x16x16_LD_T, XE_8x16x16_F32F16F16F32_TT,
+           half_t, half_t, float, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
+
+  std::cout << "\n\n==========  fp16, ColumnMajor, RowMajor  ==========" << std::endl;
+  run_gemm<XE_2D_U16x16x16_LD_T, XE_2D_U16x32x32_LD_N, XE_8x16x16_F32F16F16F32_TT,
+           half_t, half_t, float, cutlass::layout::ColumnMajor, cutlass::layout::RowMajor>(argc, argv);
+
+  std::cout << "\n\n==========  fp16, ColumnMajor, ColumnMajor  ==========" << std::endl;
+  run_gemm<XE_2D_U16x16x16_LD_T, XE_2D_U16x16x16_LD_T, XE_8x16x16_F32F16F16F32_TT,
+           half_t, half_t, float, cutlass::layout::ColumnMajor, cutlass::layout::ColumnMajor>(argc, argv);
+
+  // fp32
+  // std::cout << "\n\n==========  fp32, RowMajor, RowMajor  ==========" << std::endl;
+  // run_gemm<XE_2D_U32x32x16_LD_N, XE_2D_U32x32x16_LD_N, XE_8x16x8_F32TF32TF32F32_TT,
+  //          float, float, float, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
+
+  // std::cout << "\n\n==========  tf32, RowMajor, ColumnMajor  ==========" << std::endl;
+  // run_gemm<XE_2D_U32x32x16_LD_N, XE_2D_U32x16x8_LD_T, XE_8x16x8_F32TF32TF32F32_TT,
+  //          float, float, float, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
+
+  // std::cout << "\n\n==========  fp32, ColumnMajor, RowMajor  ==========" << std::endl;
+  // run_gemm<XE_2D_U32x16x8_LD_T, XE_2D_U32x32x16_LD_N, XE_8x16x8_F32TF32TF32F32_TT,
+  //          float, float, float, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
+
+  // std::cout << "\n\n==========  tf32, ColumnMajor, ColumnMajor  ==========" << std::endl;
+  // run_gemm<XE_2D_U32x16x8_LD_T, XE_2D_U32x16x8_LD_T, XE_8x16x8_F32TF32TF32F32_TT,
+  //          float, float, float, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
+
+  // tf32
+  // std::cout << "\n\n==========  tf32, RowMajor, RowMajor  ==========" << std::endl;
+  // run_gemm<XE_2D_TF32x32x16_LD_N, XE_2D_U32x32x16_LD_N, XE_8x16x8_F32TF32TF32F32_TT,
+  //          tfloat32_t, tfloat32_t, float, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
+
+  // std::cout << "\n\n==========  tf32, RowMajor, ColumnMajor  ==========" << std::endl;
+  // run_gemm<XE_2D_TF32x32x16_LD_N, XE_2D_U32x16x8_LD_T, XE_8x16x8_F32TF32TF32F32_TT,
+  //          tfloat32_t, tfloat32_t, float, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
 }
