@@ -146,54 +146,24 @@ public:
   // Methods
   //
 
-  static constexpr auto construct_mkl_tensor_A(Arguments const &args) {
-    using LayoutA = cutlass::detail::StrideToLayoutTagA_t<StrideA>;
-
-    auto [M, N, K, L] = args.problem_shape;
-
-    if constexpr (std::is_same_v<LayoutA, cutlass::layout::RowMajor>) {
-      return make_tensor(make_gmem_ptr(static_cast<ElementA const*>(args.mainloop.ptr_A)),
-                            make_layout(make_shape(M,K,L),make_stride((int64_t)K, _1{}, (int64_t)M * K)));
-    } else {
-      return make_tensor(make_gmem_ptr(static_cast<ElementA const*>(args.mainloop.ptr_A)),
-                            make_layout(make_shape(M,K,L), make_stride(_1{}, (int64_t)M, (int64_t)M * K)));
-    }
-  }
-
-  static constexpr auto construct_nkl_tensor_B(Arguments const &args) {
-    using LayoutB = cutlass::detail::StrideToLayoutTagB_t<StrideB>;
-
-    auto [M, N, K, L] = args.problem_shape;
-
-    if constexpr (std::is_same_v<LayoutB, cutlass::layout::RowMajor>) {
-      return make_tensor(make_gmem_ptr(static_cast<ElementB const*>(args.mainloop.ptr_B)),
-                            make_layout(make_shape(N,K,L), make_stride(_1{}, (int64_t)N, (int64_t)N * K)));
-    } else {
-      return make_tensor(make_gmem_ptr(static_cast<ElementB const*>(args.mainloop.ptr_B)),
-                            make_layout(make_shape(N,K,L), make_stride((int64_t)K, _1{}, (int64_t)N * K)));
-    }
-  }
-
   // Convert to underlying arguments. In this case, a simple copy for the aliased type.
   static
   Params
   to_underlying_arguments(Arguments const& args, void* workspace) {
     (void) workspace;
 
-    auto mA_mkl = construct_mkl_tensor_A(args);
-    auto mB_nkl = construct_nkl_tensor_B(args);
+    auto mainloop_args = CollectiveMainloop::to_underlying_arguments(args.problem_shape, args.mainloop, workspace);
 
     auto l_coord = BlockIdxZ();
-
-    Tensor mA_mk = mA_mkl(_,_,l_coord);
-    Tensor mB_nk = mB_nkl(_,_,l_coord);
+    Tensor mA_mk = mainloop_args.mA(_,_,l_coord);
+    Tensor mB_nk = mainloop_args.mB(_,_,l_coord);
 
     return {
       args.mode,
       args.problem_shape,
       mA_mk,
       mB_nk,
-      CollectiveMainloop::to_underlying_arguments(mA_mkl, mB_nkl, workspace),
+      mainloop_args,
       CollectiveEpilogue::to_underlying_arguments(args.problem_shape, args.epilogue, workspace)
     };
   }

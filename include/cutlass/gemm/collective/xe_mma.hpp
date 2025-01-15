@@ -148,8 +148,8 @@ struct CollectiveMma<
   };
 
   struct Params {
-    TensorMKL tensorA;
-    TensorNKL tensorB;
+    TensorMKL mA;
+    TensorNKL mB;
   };
 
   //
@@ -158,11 +158,20 @@ struct CollectiveMma<
 
   CollectiveMma() = default;
 
+  template <class ProblemShape>
   static constexpr Params
-  to_underlying_arguments(TensorMKL const & tensorA, TensorNKL const &tensorB, void* workspace) {
+  to_underlying_arguments(ProblemShape const& problem_shape, Arguments const& args, void* workspace) {
     (void) workspace;
 
-    return Params{tensorA, tensorB};
+    auto [M,N,K,L] = problem_shape;
+
+    auto mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(args.ptr_A)),
+                              make_layout(make_shape(M, K, L), args.dA));
+
+    auto mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(args.ptr_B)),
+                              make_layout(make_shape(N, K, L), args.dB));
+
+    return Params{mA_mkl, mB_nkl};
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
@@ -198,9 +207,9 @@ struct CollectiveMma<
     (void)thread_idx;
     (void)smem_buf;
 
-    auto gmem_tiled_copy_a = make_xe_2d_copy(atom_load_A{}.with(mainloop.tensorA),
+    auto gmem_tiled_copy_a = make_xe_2d_copy(atom_load_A{}.with(mainloop.mA),
                                              Layout<Shape<_1, Int<SubgroupSize>>>{});
-    auto gmem_tiled_copy_b = make_xe_2d_copy(atom_load_B{}.with(mainloop.tensorB),
+    auto gmem_tiled_copy_b = make_xe_2d_copy(atom_load_B{}.with(mainloop.mB),
                                              Layout<Shape<_1, Int<SubgroupSize>>>{});
 
     // Instantiate the MMA object
