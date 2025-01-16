@@ -431,103 +431,103 @@ int run_gemm(int argc, const char** argv)
 
 int main(int argc, const char** argv)
 {
-  // ================  bfloat16  ================
-  std::cout << "\n\n==========  bf16, RowMajor, RowMajor  ==========" << std::endl;
+  // ++++++++++++++++  bfloat16_t  ++++++++++++++++
+  std::cout << "\n\n==========  bfloat16_t, RowMajor, RowMajor  ==========" << std::endl;
   run_gemm<XE_2D_U16x32x32_LD_N, XE_2D_U16x32x32_LD_N, XE_8x16x16_F32BF16BF16F32_TT,
            bfloat16_t, bfloat16_t, float, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
 
-  std::cout << "\n\n==========  bf16, RowMajor, ColumnMajor  ==========" << std::endl;
+  std::cout << "\n\n==========  bfloat16_t, RowMajor, ColumnMajor  ==========" << std::endl;
   run_gemm<XE_2D_U16x32x32_LD_N, XE_2D_U16x16x16_LD_T, XE_8x16x16_F32BF16BF16F32_TT,
            bfloat16_t, bfloat16_t, float, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
 
-  std::cout << "\n\n==========  bf16, ColumnMajor, RowMajor  ==========" << std::endl;
+  std::cout << "\n\n==========  bfloat16_t, ColumnMajor, RowMajor  ==========" << std::endl;
   run_gemm<XE_2D_U16x16x16_LD_T, XE_2D_U16x32x32_LD_N, XE_8x16x16_F32BF16BF16F32_TT,
            bfloat16_t, bfloat16_t, float, cutlass::layout::ColumnMajor, cutlass::layout::RowMajor>(argc, argv);
 
-  std::cout << "\n\n==========  bf16, ColumnMajor, ColumnMajor  ==========" << std::endl;
+  std::cout << "\n\n==========  bfloat16_t, ColumnMajor, ColumnMajor  ==========" << std::endl;
   run_gemm<XE_2D_U16x16x16_LD_T, XE_2D_U16x16x16_LD_T, XE_8x16x16_F32BF16BF16F32_TT,
            bfloat16_t, bfloat16_t, float, cutlass::layout::ColumnMajor, cutlass::layout::ColumnMajor>(argc, argv);
 
 
 
-  // ================  int8  ================
-  std::cout << "\n\n==========  int8, RowMajor, RowMajor  ==========" << std::endl;
+  // ++++++++++++++++  int8_t  ++++++++++++++++
+  std::cout << "\n\n==========  int8_t, RowMajor, RowMajor  ==========" << std::endl;
   run_gemm<XE_2D_U8x32x32_LD_N, XE_2D_U8x32x32_LD_V, XE_8x16x32_S32S8S8S32_TT,
            int8_t, int8_t, int32_t, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
 
-  std::cout << "\n\n==========  int8, RowMajor, ColumnMajor  ==========" << std::endl;
+  std::cout << "\n\n==========  int8_t, RowMajor, ColumnMajor  ==========" << std::endl;
   run_gemm<XE_2D_U8x32x32_LD_N, XE_2D_U8x32x16_LD_T, XE_8x16x32_S32S8S8S32_TT,
            int8_t, int8_t, int32_t, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
 
-  // std::cout << "\n\n==========  int8, ColumnMajor, RowMajor  ==========" << std::endl;
+  // std::cout << "\n\n==========  int8_t, ColumnMajor, RowMajor  ==========" << std::endl;
   // run_gemm<XE_2D_U8x32x16_LD_T, XE_2D_U8x32x32_LD_V, XE_8x16x32_S32S8S8S32_TT,
   //          int8_t, int8_t, int32_t, cutlass::layout::ColumnMajor, cutlass::layout::RowMajor>(argc, argv);
 
-  // std::cout << "\n\n==========  int8, ColumnMajor, ColumnMajor  ==========" << std::endl;
+  // std::cout << "\n\n==========  int8_t, ColumnMajor, ColumnMajor  ==========" << std::endl;
   // run_gemm<XE_2D_U8x32x16_LD_T, XE_2D_U8x32x16_LD_T, XE_8x16x32_S32S8S8S32_TT,
   //          int8_t, int8_t, int32_t, cutlass::layout::ColumnMajor, cutlass::layout::ColumnMajor>(argc, argv);
 
 
 
-  // ================  uint8  ================
-  std::cout << "\n\n==========  uint8, RowMajor, RowMajor  ==========" << std::endl;
+  // ++++++++++++++++  uint8_t  ++++++++++++++++
+  std::cout << "\n\n==========  uint8_t, RowMajor, RowMajor  ==========" << std::endl;
   run_gemm<XE_2D_U8x32x32_LD_N, XE_2D_U8x32x32_LD_V, XE_8x16x32_S32U8U8S32_TT,
            uint8_t, uint8_t, int32_t, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
 
-  std::cout << "\n\n==========  uint8, RowMajor, ColumnMajor  ==========" << std::endl;
+  std::cout << "\n\n==========  uint8_t, RowMajor, ColumnMajor  ==========" << std::endl;
   run_gemm<XE_2D_U8x32x32_LD_N, XE_2D_U8x32x16_LD_T, XE_8x16x32_S32S8S8S32_TT,
            uint8_t, uint8_t, int32_t, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
 
-  // std::cout << "\n\n==========  uint8, ColumnMajor, RowMajor  ==========" << std::endl;
+  // std::cout << "\n\n==========  uint8_t, ColumnMajor, RowMajor  ==========" << std::endl;
   // run_gemm<XE_2D_U8x32x16_LD_T, XE_2D_U8x32x32_LD_V, XE_8x16x32_S32S8S8S32_TT,
   //          uint8_t, uint8_t, int32_t, cutlass::layout::ColumnMajor, cutlass::layout::RowMajor>(argc, argv);
 
-  // std::cout << "\n\n==========  uint8, ColumnMajor, ColumnMajor  ==========" << std::endl;
+  // std::cout << "\n\n==========  uint8_t, ColumnMajor, ColumnMajor  ==========" << std::endl;
   // run_gemm<XE_2D_U8x32x16_LD_T, XE_2D_U8x32x16_LD_T, XE_8x16x32_S32S8S8S32_TT,
   //          uint8_t, uint8_t, int32_t, cutlass::layout::ColumnMajor, cutlass::layout::ColumnMajor>(argc, argv);
 
 
 
-  // ================  fp16  ================
-  std::cout << "\n\n==========  fp16, RowMajor, RowMajor  ==========" << std::endl;
+  // ++++++++++++++++  half_t  ++++++++++++++++
+  std::cout << "\n\n==========  half_t, RowMajor, RowMajor  ==========" << std::endl;
   run_gemm<XE_2D_U16x32x32_LD_N, XE_2D_U16x32x32_LD_N, XE_8x16x16_F32F16F16F32_TT,
            half_t, half_t, float, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
 
-  std::cout << "\n\n==========  fp16, RowMajor, ColumnMajor  ==========" << std::endl;
+  std::cout << "\n\n==========  half_t, RowMajor, ColumnMajor  ==========" << std::endl;
   run_gemm<XE_2D_U16x32x32_LD_N, XE_2D_U16x16x16_LD_T, XE_8x16x16_F32F16F16F32_TT,
            half_t, half_t, float, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
 
-  std::cout << "\n\n==========  fp16, ColumnMajor, RowMajor  ==========" << std::endl;
+  std::cout << "\n\n==========  half_t, ColumnMajor, RowMajor  ==========" << std::endl;
   run_gemm<XE_2D_U16x16x16_LD_T, XE_2D_U16x32x32_LD_N, XE_8x16x16_F32F16F16F32_TT,
            half_t, half_t, float, cutlass::layout::ColumnMajor, cutlass::layout::RowMajor>(argc, argv);
 
-  std::cout << "\n\n==========  fp16, ColumnMajor, ColumnMajor  ==========" << std::endl;
+  std::cout << "\n\n==========  half_t, ColumnMajor, ColumnMajor  ==========" << std::endl;
   run_gemm<XE_2D_U16x16x16_LD_T, XE_2D_U16x16x16_LD_T, XE_8x16x16_F32F16F16F32_TT,
            half_t, half_t, float, cutlass::layout::ColumnMajor, cutlass::layout::ColumnMajor>(argc, argv);
 
-  // fp32
-  // std::cout << "\n\n==========  fp32, RowMajor, RowMajor  ==========" << std::endl;
+  // ++++++++++++++++  float  ++++++++++++++++
+  // std::cout << "\n\n==========  float, RowMajor, RowMajor  ==========" << std::endl;
   // run_gemm<XE_2D_U32x32x16_LD_N, XE_2D_U32x32x16_LD_N, XE_8x16x8_F32TF32TF32F32_TT,
   //          float, float, float, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
 
-  // std::cout << "\n\n==========  tf32, RowMajor, ColumnMajor  ==========" << std::endl;
+  // std::cout << "\n\n==========  float, RowMajor, ColumnMajor  ==========" << std::endl;
   // run_gemm<XE_2D_U32x32x16_LD_N, XE_2D_U32x16x8_LD_T, XE_8x16x8_F32TF32TF32F32_TT,
   //          float, float, float, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
 
-  // std::cout << "\n\n==========  fp32, ColumnMajor, RowMajor  ==========" << std::endl;
+  // std::cout << "\n\n==========  float, ColumnMajor, RowMajor  ==========" << std::endl;
   // run_gemm<XE_2D_U32x16x8_LD_T, XE_2D_U32x32x16_LD_N, XE_8x16x8_F32TF32TF32F32_TT,
   //          float, float, float, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
 
-  // std::cout << "\n\n==========  tf32, ColumnMajor, ColumnMajor  ==========" << std::endl;
+  // std::cout << "\n\n==========  float, ColumnMajor, ColumnMajor  ==========" << std::endl;
   // run_gemm<XE_2D_U32x16x8_LD_T, XE_2D_U32x16x8_LD_T, XE_8x16x8_F32TF32TF32F32_TT,
   //          float, float, float, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
 
-  // tf32
-  // std::cout << "\n\n==========  tf32, RowMajor, RowMajor  ==========" << std::endl;
+  // ++++++++++++++++  tfloat32_t  ++++++++++++++++
+  // std::cout << "\n\n==========  tfloat32_t, RowMajor, RowMajor  ==========" << std::endl;
   // run_gemm<XE_2D_TF32x32x16_LD_N, XE_2D_U32x32x16_LD_N, XE_8x16x8_F32TF32TF32F32_TT,
   //          tfloat32_t, tfloat32_t, float, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
 
-  // std::cout << "\n\n==========  tf32, RowMajor, ColumnMajor  ==========" << std::endl;
+  // std::cout << "\n\n==========  tfloat32_t, RowMajor, ColumnMajor  ==========" << std::endl;
   // run_gemm<XE_2D_TF32x32x16_LD_N, XE_2D_U32x16x8_LD_T, XE_8x16x8_F32TF32TF32F32_TT,
   //          tfloat32_t, tfloat32_t, float, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
 }
