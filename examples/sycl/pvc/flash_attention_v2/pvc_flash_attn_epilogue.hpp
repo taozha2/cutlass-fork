@@ -107,8 +107,8 @@ public:
   using XE_Copy_O = decltype(make_tiled_copy(Copy_Atom<Trait_O, ElementO>{}
                                .with(static_cast<ElementO const*>(nullptr), int32_t(0), int32_t(0), int32_t(0)),
                                Layout<Shape<_1, Int<SubgroupSize>>>{},
-                               make_layout(make_shape(get<0>(typename Trait_O::Shape_MN{}),
-                                                      get<1>(typename Trait_O::Shape_MN{}) / Int<SubgroupSize>{}))));
+                               make_layout(make_shape(get<0>(typename Trait_O::BlockShape{}),
+                                                      get<1>(typename Trait_O::BlockShape{}) / Int<SubgroupSize>{}))));
 private:
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementO>;
 
@@ -160,8 +160,8 @@ public:
     xe_store_o = make_tiled_copy(Copy_Atom<Copy_Traits<CopyOpO>, ElementO>{}.with(
                                 args.ptr_O, head_size, seq_len, head_size),
                                 Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                make_layout(make_shape(get<0>(typename Trait_O::Shape_MN{}),
-                                                        get<1>(typename Trait_O::Shape_MN{}) / Int<SubgroupSize>{})));
+                                make_layout(make_shape(get<0>(typename Trait_O::BlockShape{}),
+                                                        get<1>(typename Trait_O::BlockShape{}) / Int<SubgroupSize>{})));
 
     return {
       FusionCallbacks::to_underlying_arguments(problem_shape, args.thread, workspace),

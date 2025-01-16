@@ -68,8 +68,8 @@ struct XeAuxLoad {
   using XE_Copy_Aux = decltype(make_tiled_copy(Copy_Atom<Trait_Aux, Element>{}
                       .with(static_cast<Element const*>(nullptr), int32_t(0), int32_t(0), int32_t(0)),
                          Layout<Shape<_1, SubgroupSize>>{},
-                         make_layout(make_shape(get<0>(typename Trait_Aux::Shape_MN{}),
-                         get<1>(typename Trait_Aux::Shape_MN{}) / SubgroupSize{}))));
+                         make_layout(make_shape(get<0>(typename Trait_Aux::BlockShape{}),
+                         get<1>(typename Trait_Aux::BlockShape{}) / SubgroupSize{}))));
   struct Params {
     XE_Copy_Aux xe_load_aux;
     Element null_default = Element(0);
@@ -90,8 +90,8 @@ struct XeAuxLoad {
     XE_Copy_Aux xe_load_aux = make_tiled_copy(Copy_Atom<Trait_Aux, Element>{}.with(
                                   args.ptr_aux, N_AUX, M_AUX, N_AUX),
                                   Layout<Shape<_1, SubgroupSize>>{},
-                                  make_layout(make_shape(get<0>(typename Trait_Aux::Shape_MN{}),
-                                                         get<1>(typename Trait_Aux::Shape_MN{}) / SubgroupSize{})));
+                                  make_layout(make_shape(get<0>(typename Trait_Aux::BlockShape{}),
+                                                         get<1>(typename Trait_Aux::BlockShape{}) / SubgroupSize{})));
 
     bool use_default = false;
     if constexpr (EnableNullptr) {

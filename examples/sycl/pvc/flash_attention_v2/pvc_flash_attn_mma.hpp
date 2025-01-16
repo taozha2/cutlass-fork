@@ -147,23 +147,23 @@ struct CollectiveMmaAttention<
   using XE_Copy_Q = decltype(make_tiled_copy(atom_load_Q{}
                                             .with(static_cast<ElementQ const*>(nullptr), int32_t(0), int32_t(0), int32_t(0)), 
                                             Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                            make_layout(make_shape(get<0>(typename traits_load_Q::Shape_MN{}),
-                                                                   get<1>(typename traits_load_Q::Shape_MN{}) / Int<SubgroupSize>{}))));
+                                            make_layout(make_shape(get<0>(typename traits_load_Q::BlockShape{}),
+                                                                   get<1>(typename traits_load_Q::BlockShape{}) / Int<SubgroupSize>{}))));
   using traits_load_K = Copy_Traits<GmemTiledCopyK>;
   using atom_load_K = Copy_Atom<traits_load_K, ElementK>;
   using XE_Copy_K = decltype(make_tiled_copy(atom_load_K{}
                                             .with(static_cast<ElementK const*>(nullptr), int32_t(0), int32_t(0), int32_t(0)),
                                             Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                            make_layout(make_shape(get<0>(typename traits_load_K::Shape_MN{}),
-                                                                   get<1>(typename traits_load_K::Shape_MN{}) / Int<SubgroupSize>{}))));
+                                            make_layout(make_shape(get<0>(typename traits_load_K::BlockShape{}),
+                                                                   get<1>(typename traits_load_K::BlockShape{}) / Int<SubgroupSize>{}))));
 
   using traits_load_V = Copy_Traits<GmemTiledCopyV>;
   using atom_load_V = Copy_Atom<traits_load_V, ElementV>;
   using XE_Copy_V = decltype(make_tiled_copy(atom_load_V{}
                                             .with(static_cast<ElementV const*>(nullptr), int32_t(0), int32_t(0), int32_t(0)),
                                             Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                            make_layout(make_shape(get<0>(typename traits_load_K::Shape_MN{}),
-                                                                   get<1>(typename traits_load_K::Shape_MN{}) / Int<SubgroupSize>{}))));
+                                            make_layout(make_shape(get<0>(typename traits_load_K::BlockShape{}),
+                                                                   get<1>(typename traits_load_K::BlockShape{}) / Int<SubgroupSize>{}))));
 
   using XE_Prefetch_Q = decltype(cute::detail::prefetch_selector<PrefetchQTileSize, ElementQ>());
   using XE_Prefetch_K = decltype(cute::detail::prefetch_selector<PrefetchKTileSize, ElementK>());
@@ -204,17 +204,17 @@ struct CollectiveMmaAttention<
 
     XE_Copy_Q copyQ = make_tiled_copy(Copy_Atom<Copy_Traits<GmemTiledCopyQ>, ElementQ>{}.with(args.ptr_Q, head_size, seq_len, head_size),
                                       Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                      make_layout(make_shape(get<0>(typename traits_load_Q::Shape_MN{}),
-                                                             get<1>(typename traits_load_Q::Shape_MN{}) / Int<SubgroupSize>{})));
+                                      make_layout(make_shape(get<0>(typename traits_load_Q::BlockShape{}),
+                                                             get<1>(typename traits_load_Q::BlockShape{}) / Int<SubgroupSize>{})));
     XE_Copy_K copyK = make_tiled_copy(Copy_Atom<Copy_Traits<GmemTiledCopyK>, ElementK>{}.with(args.ptr_K, seq_len, head_size, seq_len),
                                       Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                      make_layout(make_shape(get<0>(typename traits_load_K::Shape_MN{}),
-                                                             get<1>(typename traits_load_K::Shape_MN{}) / Int<SubgroupSize>{})));
+                                      make_layout(make_shape(get<0>(typename traits_load_K::BlockShape{}),
+                                                             get<1>(typename traits_load_K::BlockShape{}) / Int<SubgroupSize>{})));
 
     XE_Copy_V copyV = make_tiled_copy(Copy_Atom<Copy_Traits<GmemTiledCopyV>, ElementV>{}.with(args.ptr_V, head_size, seq_len, head_size),
                                       Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                      make_layout(make_shape(get<0>(typename traits_load_V::Shape_MN{}),
-                                                             get<1>(typename traits_load_V::Shape_MN{}) / Int<SubgroupSize>{})));
+                                      make_layout(make_shape(get<0>(typename traits_load_V::BlockShape{}),
+                                                             get<1>(typename traits_load_V::BlockShape{}) / Int<SubgroupSize>{})));
 
     XE_Prefetch_Q prefetchQ = cute::detail::prefetch_selector<PrefetchQTileSize, ElementQ>((void *)args.ptr_Q, head_size, seq_len, head_size);
     XE_Prefetch_K prefetchK = cute::detail::prefetch_selector<PrefetchKTileSize, ElementK>((void *)args.ptr_K, seq_len, head_size, seq_len);
@@ -288,10 +288,10 @@ struct CollectiveMmaAttention<
     auto [m_coord, n_coord, k_coord, l_coord] = tile_coord;
     Tensor iter_a = params.gmem_tiled_copy_q.get_pvc_tensor(
       make_coord(m_coord, 0, l_coord), append<4>(tCrA_copy_view.shape(), k_tile_count),
-      append<3>(typename XE_Copy_Q::Shape_MN{}, BLK_K), seq<0,1,1>{});
+      append<3>(typename XE_Copy_Q::BlockShape{}, BLK_K), seq<0,1,1>{});
     Tensor iter_b = params.gmem_tiled_copy_k.get_pvc_tensor(
       make_coord(0, n_coord, l_coord), append<4>(tCrB_copy_view.shape(), k_tile_count),
-      append<3>(typename XE_Copy_K::Shape_MN{}, BLK_K), seq<0,1,0>{});
+      append<3>(typename XE_Copy_K::BlockShape{}, BLK_K), seq<0,1,0>{});
 
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = 0; k_tile < k_tile_count; ++k_tile) {
@@ -361,7 +361,7 @@ struct CollectiveMmaAttention<
 
     Tensor iter_b = params.gmem_tiled_copy_v.get_pvc_tensor(
       make_coord(0, n_coord, l_coord), append<4>(tCrB_copy_view.shape(), k_tile_count),
-      append<3>(typename XE_Copy_K::Shape_MN{}, BLK_K), seq<0,1,0>{});   
+      append<3>(typename XE_Copy_K::BlockShape{}, BLK_K), seq<0,1,0>{});   
 
     copy(params.gmem_tiled_copy_v, iter_b(_,_,_, load_idx), tCrB_copy_view);
 
