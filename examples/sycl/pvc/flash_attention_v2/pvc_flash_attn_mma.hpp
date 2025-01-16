@@ -321,6 +321,8 @@ struct CollectiveMmaAttention<
 
     auto tCrB_copy_view = gmem_thr_copy_B.retile_D(tCrB_partition);
 
+    Tensor tCrB = gmem_thr_copy_B.retile_MMA(thread_mma, tCrB_partition);
+
   #if CUTLASS_ENABLE_DEBUG_PRINTS
     if (thread(LOG_THREAD, LOG_GROUP)) {
         print("=====================  B :\n");
