@@ -101,6 +101,7 @@ struct gemm_device_partition_fragment_abc {
     Tensor fragment_B = thrd_mma.partition_fragment_B(gB(_, _, 0));
     Tensor fragment_C = thrd_mma.partition_fragment_C(gC);
 
+
     auto thr_copy_a = copy_a.get_slice(thread_idx);
     auto copy_view_A = thr_copy_a.retile_D(fragment_A);
 
@@ -109,6 +110,9 @@ struct gemm_device_partition_fragment_abc {
 
     auto thr_copy_c = copy_c.get_slice(thread_idx);
     auto copy_view_C = thr_copy_c.retile_D(fragment_C);
+
+    Tensor mma_A = thr_copy_a.retile_MMA(thrd_mma, fragment_A);
+    Tensor mma_B = thr_copy_b.retile_MMA(thrd_mma, fragment_B);
 
     clear(fragment_C);
 
@@ -188,7 +192,7 @@ struct gemm_device_partition_fragment_abc {
       copy(copy_b, blk_tgB, copy_view_B);
 
       // Compute gemm on mma-partitioned smem
-      cute::gemm(mma, copy_a, copy_b, fragment_A, fragment_B, fragment_C);
+      cute::gemm(mma, mma_A, mma_B, fragment_C);
     }
 
     Tensor blk_tgC =

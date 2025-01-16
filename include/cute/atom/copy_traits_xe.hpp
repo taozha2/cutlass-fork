@@ -2069,6 +2069,39 @@ public:
     }
   }
 
+  template <class MMA, class MMATensor>
+  CUTE_HOST_DEVICE
+  auto
+  retile_MMA(MMA const&, MMATensor&& mma_tensor) {
+    if constexpr (TiledCopy::is_convention_MN) {
+      static constexpr auto m = decltype(size<1>(mma_tensor.shape()))::value;
+      static constexpr auto k = decltype(size<2>(mma_tensor.shape()))::value;
+      static constexpr auto m_step = size<0>(typename TiledCopy::BlockShape{})
+                                        / size<0>(typename MMA::Shape_MNK{});
+      static constexpr auto k_step = size<1>(typename TiledCopy::BlockShape{})
+                                        / size<2>(typename MMA::Shape_MNK{});
+
+      auto retiled_tensor = make_tensor(mma_tensor.data(),
+                                        make_shape(size<0>(mma_tensor.shape()),
+                                                   Int<m_step>{},
+                                                   Int<k_step>{},
+                                                   Int<m / m_step>{},
+                                                   Int<k / k_step>{}));
+      return make_tensor(mma_tensor.data(),group<2, 4>(group<1, 3>(select<0, 1, 3, 2, 4>(retiled_tensor.layout()))));
+    } else {
+      static constexpr auto k = decltype(size<2>(mma_tensor.shape()))::value;
+      static constexpr auto k_step = size<0>(typename TiledCopy::BlockShape{})
+                                      / size<2>(typename MMA::Shape_MNK{});
+
+      auto retiled_tensor = make_tensor(mma_tensor.data(),
+                                        make_shape(size<0>(mma_tensor.shape()),
+                                                   Int<k_step>{},
+                                                   size<1>(mma_tensor.shape()),
+                                                   Int<k / k_step>{}));
+      return make_tensor(mma_tensor.data(),group<2, 4>(select<0, 2, 1, 3>(retiled_tensor.layout())));
+    }
+  }
+
 private:
 
   template <class DTensor>

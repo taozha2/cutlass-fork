@@ -173,7 +173,7 @@ struct gemm_device_tiled_copy_abc {
       copy(tiled_copy_B, blk_tgB, tCrB_copy_view);
 
       // Compute gemm on mma-partitioned smem
-      cute::gemm(mma, tiled_copy_A, tiled_copy_B, tCrA, tCrB, tCrC);
+      cute::gemm(mma, tCrA, tCrB, tCrC);
     }
 
     Tensor blk_tgC = tiled_copy_C.get_pvc_tensor(make_coord(m_coord, n_coord, l_coord),
