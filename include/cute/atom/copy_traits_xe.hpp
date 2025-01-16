@@ -229,6 +229,22 @@ struct XE_2D_LD_Unpack {
                         make_layout(new_shape, new_stride));
   }
 
+  template <class GCoord, class GShape, class GStride, class Basis = decltype(make_seq<rank(GStride{})>{})>
+  CUTE_HOST_DEVICE constexpr auto get_pvc_tensor(GCoord const &coord,
+                                                 GShape const &shape,
+                                                 GStride const &stride, 
+                                                 Basis const & basis = {}) const {
+
+    auto R = rank(GShape{});
+    static_assert(R == 3 || R == 4, "mismatch rank");
+    auto t_shape = cute::tuple_cat(make_shape(_1{}), take<1, R>(shape));
+    auto t_stride =  cute::tuple_cat(make_stride(_1{}), transform(basis, stride, [&](auto i, auto s){
+        return E<i>{} * s;
+    }));
+    return make_tensor(make_inttuple_iter(coord),
+                       make_layout(t_shape, t_stride));
+  }
+
   template <class... TensorArgs>
   static constexpr auto with(Tensor<TensorArgs...> const &tensor) {
       return Traits_LD_t{tensor};
@@ -318,6 +334,22 @@ template <class CopyOp, class StrideIndicator = cute::Stride<int64_t, cute::Int<
                                                                   }));
     return make_tensor(make_inttuple_iter(coord),
                         make_layout(new_shape, new_stride));
+  }
+
+  template <class GCoord, class GShape, class GStride, class Basis = decltype(make_seq<rank(GStride{})>{})>
+  CUTE_HOST_DEVICE constexpr auto get_pvc_tensor(GCoord const &coord,
+                                                 GShape const &shape,
+                                                 GStride const &stride, 
+                                                 Basis const & basis = {}) const {
+
+    auto R = rank(GShape{});
+    static_assert(R == 3 || R == 4, "mismatch rank");
+    auto t_shape = cute::tuple_cat(make_shape(_1{}), take<1, R>(shape));
+    auto t_stride =  cute::tuple_cat(make_stride(_1{}), transform(basis, stride, [&](auto i, auto s){
+        return E<i>{} * s;
+    }));
+    return make_tensor(make_inttuple_iter(coord),
+                       make_layout(t_shape, t_stride));
   }
 
   template <class... TensorArgs>
@@ -2138,7 +2170,7 @@ struct Xe2DTiledCopy : TiledCopy<Copy_Atom, LayoutCopy_TV, ShapeTiler_MN>{
             __CUTE_REQUIRES(is_integral<ThrIdx>::value)>
   CUTE_HOST_DEVICE
   auto
-  get_slice(ThrIdx const& thr_idx)
+  get_slice(ThrIdx const& thr_idx) const
   {
     return Xe2DThrCopy<Xe2DTiledCopy, ThrIdx>(thr_idx);
   }
