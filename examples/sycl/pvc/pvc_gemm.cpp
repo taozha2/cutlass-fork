@@ -475,15 +475,15 @@ int main(int argc, const char** argv)
            uint8_t, uint8_t, int32_t, cutlass::layout::RowMajor, cutlass::layout::RowMajor>(argc, argv);
 
   std::cout << "\n\n==========  uint8_t, RowMajor, ColumnMajor  ==========" << std::endl;
-  run_gemm<XE_2D_U8x32x32_LD_N, XE_2D_U8x32x16_LD_T, XE_8x16x32_S32S8S8S32_TT,
+  run_gemm<XE_2D_U8x32x32_LD_N, XE_2D_U8x32x16_LD_T, XE_8x16x32_S32U8U8S32_TT,
            uint8_t, uint8_t, int32_t, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
 
   // std::cout << "\n\n==========  uint8_t, ColumnMajor, RowMajor  ==========" << std::endl;
-  // run_gemm<XE_2D_U8x32x16_LD_T, XE_2D_U8x32x32_LD_V, XE_8x16x32_S32S8S8S32_TT,
+  // run_gemm<XE_2D_U8x32x16_LD_T, XE_2D_U8x32x32_LD_V, XE_8x16x32_S32U8U8S32_TT,
   //          uint8_t, uint8_t, int32_t, cutlass::layout::ColumnMajor, cutlass::layout::RowMajor>(argc, argv);
 
   // std::cout << "\n\n==========  uint8_t, ColumnMajor, ColumnMajor  ==========" << std::endl;
-  // run_gemm<XE_2D_U8x32x16_LD_T, XE_2D_U8x32x16_LD_T, XE_8x16x32_S32S8S8S32_TT,
+  // run_gemm<XE_2D_U8x32x16_LD_T, XE_2D_U8x32x16_LD_T, XE_8x16x32_S32U8U8S32_TT,
   //          uint8_t, uint8_t, int32_t, cutlass::layout::ColumnMajor, cutlass::layout::ColumnMajor>(argc, argv);
 
 
