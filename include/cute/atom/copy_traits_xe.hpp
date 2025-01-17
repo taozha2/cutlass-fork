@@ -82,12 +82,6 @@ template <class T>
 static constexpr bool is_stride_leftmost<T, cute::void_t<decltype(T{}.stride())>> = std::is_same_v<_1, decltype(get<0>(T{}.stride()))>;
 
 
-template <class T, class = void>
-static constexpr bool is_stride_middle = std::is_same_v<_1, decltype(get<1>(T{}))>;
-
-template <class T>
-static constexpr bool is_stride_middle<T, cute::void_t<decltype(T{}.stride())>> = std::is_same_v<_1, decltype(get<1>(T{}.stride()))>;
-
 } // end namespace detail
 
 
@@ -105,8 +99,6 @@ struct XE_2D_LD_Unpack {
 
   static constexpr auto stride_rank = rank(StrideIndicator{});
   static_assert(stride_rank == 2 || stride_rank == 3);
-
-  static_assert(detail::is_stride_leftmost<StrideIndicator> || detail::is_stride_middle<StrideIndicator>);
 
   // Assume LD_T/LD_N will indicate ColumnMajor and RowMajor
   static constexpr bool is_column_major = detail::is_transpose_load<CopyOp>;
