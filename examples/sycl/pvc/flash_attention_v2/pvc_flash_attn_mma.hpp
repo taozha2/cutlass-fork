@@ -146,24 +146,18 @@ struct CollectiveMmaAttention<
   using atom_load_Q = Copy_Atom<traits_load_Q, ElementQ>;
   using XE_Copy_Q = decltype(make_xe_2d_copy(atom_load_Q{}
                                             .with(make_tensor(make_gmem_ptr(static_cast<ElementQ const*>(nullptr)), make_layout(make_shape(0, 0, 0), StrideQ{}))),
-                                            Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                            make_layout(make_shape(get<0>(typename traits_load_Q::BlockShape{}),
-                                                                   get<1>(typename traits_load_Q::BlockShape{}) / Int<SubgroupSize>{}))));
+                                            Layout<Shape<_1, Int<SubgroupSize>>>{}));
   using traits_load_K = Copy_Traits<GmemTiledCopyK, StrideK>;
   using atom_load_K = Copy_Atom<traits_load_K, ElementK>;
   using XE_Copy_K = decltype(make_xe_2d_copy(atom_load_K{}
                                             .with(make_tensor(make_gmem_ptr(static_cast<ElementK const*>(nullptr)), make_layout(make_shape(0, 0, 0), StrideK{}))),
-                                            Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                            make_layout(make_shape(get<0>(typename traits_load_K::BlockShape{}),
-                                                                   get<1>(typename traits_load_K::BlockShape{}) / Int<SubgroupSize>{}))));
+                                            Layout<Shape<_1, Int<SubgroupSize>>>{}));
 
   using traits_load_V = Copy_Traits<GmemTiledCopyV, StrideV>;
   using atom_load_V = Copy_Atom<traits_load_V, ElementV>;
   using XE_Copy_V = decltype(make_xe_2d_copy(atom_load_V{}
                                             .with(make_tensor(make_gmem_ptr(static_cast<ElementV const*>(nullptr)), make_layout(make_shape(0, 0, 0), StrideV{}))),
-                                            Layout<Shape<_1, Int<SubgroupSize>>>{},
-                                            make_layout(make_shape(get<0>(typename traits_load_K::BlockShape{}),
-                                                                   get<1>(typename traits_load_K::BlockShape{}) / Int<SubgroupSize>{}))));
+                                            Layout<Shape<_1, Int<SubgroupSize>>>{}));
 
   using XE_Prefetch_Q = decltype(cute::detail::prefetch_selector<PrefetchQTileSize, ElementQ>());
   using XE_Prefetch_K = decltype(cute::detail::prefetch_selector<PrefetchKTileSize, ElementK>());
@@ -202,11 +196,14 @@ struct CollectiveMmaAttention<
 
     auto [batch, num_heads, seq_len, head_size] = problem_shape;
 
-    XE_Copy_Q copyQ = make_xe_2d_copy(Copy_Atom<Copy_Traits<GmemTiledCopyQ, StrideQ>, ElementQ>{}.with(make_tensor(make_gmem_ptr(static_cast<ElementQ const*>(args.ptr_Q)), make_layout(make_shape(seq_len, head_size, batch * num_heads), args.dQ))),
+    XE_Copy_Q copyQ = make_xe_2d_copy(Copy_Atom<Copy_Traits<GmemTiledCopyQ, StrideQ>, ElementQ>{}.with(
+      make_tensor(make_gmem_ptr(static_cast<ElementQ const*>(args.ptr_Q)), make_layout(make_shape(seq_len, head_size, batch * num_heads), args.dQ))),
                                       Layout<Shape<_1, Int<SubgroupSize>>>{});
-    XE_Copy_K copyK = make_xe_2d_copy(Copy_Atom<Copy_Traits<GmemTiledCopyK, StrideK>, ElementK>{}.with(make_tensor(make_gmem_ptr(static_cast<ElementK const*>(args.ptr_K)), make_layout(make_shape(seq_len, head_size, batch * num_heads), args.dK))),
+    XE_Copy_K copyK = make_xe_2d_copy(Copy_Atom<Copy_Traits<GmemTiledCopyK, StrideK>, ElementK>{}.with(
+      make_tensor(make_gmem_ptr(static_cast<ElementK const*>(args.ptr_K)), make_layout(make_shape(seq_len, head_size, batch * num_heads), args.dK))),
                                       Layout<Shape<_1, Int<SubgroupSize>>>{});
-    XE_Copy_V copyV = make_xe_2d_copy(Copy_Atom<Copy_Traits<GmemTiledCopyV, StrideV>, ElementV>{}.with(make_tensor(make_gmem_ptr(static_cast<ElementV const*>(args.ptr_V)), make_layout(make_shape(head_size, seq_len, batch * num_heads), args.dV))),
+    XE_Copy_V copyV = make_xe_2d_copy(Copy_Atom<Copy_Traits<GmemTiledCopyV, StrideV>, ElementV>{}.with(
+      make_tensor(make_gmem_ptr(static_cast<ElementV const*>(args.ptr_V)), make_layout(make_shape(head_size, seq_len, batch * num_heads), args.dV))),
                                       Layout<Shape<_1, Int<SubgroupSize>>>{});
 
     XE_Prefetch_Q prefetchQ = cute::detail::prefetch_selector<PrefetchQTileSize, ElementQ>((void *)args.ptr_Q, head_size, seq_len, head_size);
