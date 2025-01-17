@@ -77,7 +77,8 @@ void verify(uint32_t m, uint32_t n, uint32_t k, atype *A, btype *B, ctype *C,
           cnt++;
         }
       } else {
-        is_normal = (expect == 0 && val == 0);
+        // TODO(codeplay): Assert that at least some values are non-zero.
+        if(!(expect == 0 && val == 0)) is_normal = false;
       }
     }
   }
