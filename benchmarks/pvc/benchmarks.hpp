@@ -94,7 +94,8 @@ using PvcGemmBF16BF16FP32_RCR_6 = cutlass::gemm::device::GemmConfiguration<
         float, cutlass::layout::RowMajor,
         float, Shape<_8, _128, _32>,
         TiledMMA<MMAAtom, Layout<Shape<_1,_4,_1>>>,
-        XE_2D_U16x8x32_LD_N, XE_2D_U16x16x16_LD_T>;
+        XE_2D_U16x8x32_LD_N, XE_2D_U16x16x16_LD_T,
+        Scheduler::Gemm>;
 
 using PvcGemmBF16BF16FP32_CRR_7 = cutlass::gemm::device::GemmConfiguration<
         cutlass::arch::IntelPVC,
@@ -103,7 +104,8 @@ using PvcGemmBF16BF16FP32_CRR_7 = cutlass::gemm::device::GemmConfiguration<
         float, cutlass::layout::RowMajor,
         float, Shape<_8, _128, _32>,
         TiledMMA<MMAAtom, Layout<Shape<_1,_4,_1>>>,
-        XE_2D_U16x16x16_LD_T, XE_2D_U16x32x32_LD_V>;
+        XE_2D_U16x16x16_LD_T, XE_2D_U16x32x32_LD_V,
+        Scheduler::Gemm>;
 
 using PvcGemmBF16BF16FP32_CCR_8 = cutlass::gemm::device::GemmConfiguration<
         cutlass::arch::IntelPVC,
@@ -112,7 +114,8 @@ using PvcGemmBF16BF16FP32_CCR_8 = cutlass::gemm::device::GemmConfiguration<
         float, cutlass::layout::RowMajor,
         float, Shape<_8, _128, _32>,
         TiledMMA<MMAAtom, Layout<Shape<_1,_4,_1>>>,
-        XE_2D_U16x16x16_LD_T, XE_2D_U16x16x16_LD_T>;
+        XE_2D_U16x16x16_LD_T, XE_2D_U16x16x16_LD_T,
+        Scheduler::Gemm>;
 
 CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_RRR_1);
 CUTLASS_CREATE_GEMM_BENCHMARK(PvcGemmBF16BF16FP32_RRR_2);
