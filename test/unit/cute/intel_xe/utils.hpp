@@ -77,7 +77,7 @@ void verify(uint32_t m, uint32_t n, uint32_t k, atype *A, btype *B, ctype *C,
           cnt++;
         }
       } else {
-        is_normal = (expect == val);
+        is_normal = (expect == 0 && val == 0);
       }
     }
   }
@@ -89,7 +89,24 @@ void verify(uint32_t m, uint32_t n, uint32_t k, atype *A, btype *B, ctype *C,
 template <typename T> static void fill_matrix(cutlass::host_vector<T> &M) {
   std::random_device dev;
   std::mt19937 rng(dev());
-  std::uniform_real_distribution<float> dist((T)0.0, (T)1.0);
+
+  T start, end;
+
+  if constexpr (std::is_same_v<T, tfloat32_t> || std::is_same_v<T, half_t>
+                 || std::is_same_v<T, bfloat16_t> || std::is_same_v<T, float>) {
+    start = (T)0.0;
+    end = (T)1.0;
+  } else if constexpr (std::is_same_v<T, int8_t>) {
+    start = (T)(-5);
+    end = (T)5;
+  } else if constexpr (std::is_same_v<T, uint8_t>) {
+    start = (T)0;
+    end = (T)5;
+  } else {
+    CUTE_STATIC_ASSERT(false, "you must set coreect start/end value to initialize data");
+  }
+
+  std::uniform_real_distribution<float> dist((T)start, (T)end);
   for (int i = 0; i < M.size(); i++)
     M[i] = static_cast<T>(dist(rng));
 }
