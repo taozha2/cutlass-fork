@@ -88,7 +88,7 @@ struct XeAuxLoad {
     auto N_AUX = get<0>(args.dAux); // dAux is a stride and N_AUX is a size
     auto M_AUX = size(M);
     XE_Copy_Aux xe_load_aux = make_tiled_copy(Copy_Atom<Trait_Aux, Element>{}.with(
-                                  args.ptr_aux, N_AUX, M_AUX, N_AUX),
+                                  args.ptr_aux, M_AUX, N_AUX),
                                   Layout<Shape<_1, SubgroupSize>>{},
                                   make_layout(make_shape(get<0>(typename Trait_Aux::BlockShape{}),
                                                          get<1>(typename Trait_Aux::BlockShape{}) / SubgroupSize{})));
@@ -205,11 +205,9 @@ struct XeAuxLoad {
     auto [m_coord, n_coord, k_coord, l_coord] = args.tile_coord_mnkl;
     auto m_offset = m_coord * SG_M;
     auto n_offset = n_coord * SG_N;
-    Tensor tOuti = args.tiled_copy.get_pvc_tensor(
-            make_coord(m_offset, n_offset, 0),
-            make_shape(_, Int<FragsM>{}, Int<FragsN>{}, L),
-            make_stride(Int<get<0>(MmaAtomShape{})>{}, Int<get<1>(MmaAtomShape{})>{}, _1{}));
-    Tensor rw_coord = tOuti(_,_,_,l_coord);
+    Tensor rw_coord = args.tiled_copy.get_pvc_tensor(
+            make_coord(m_offset, n_offset, l_coord),
+            make_shape(_, Int<FragsM>{}, Int<FragsN>{}));
 
     return ConsumerStoreCallbacks(
         rw_coord, xe_copy_aux, cute::move(trAux), params_ptr
