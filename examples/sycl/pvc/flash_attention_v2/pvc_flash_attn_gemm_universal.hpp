@@ -296,10 +296,10 @@ public:
     //m, k
     Tensor prefetch_iter_2d_a = params.mainloop.gmem_prefetch_q.get_pvc_tensor(
       make_coord(seq_coord + (((sub_group_id % ATOM_N) / get<1>(PrefetchQThrShape{}))* get<0>(PrefetchQTileSize{})),   // iteration 0/M/Hight/vertical
-               (((sub_group_id % ATOM_N) % get<1>(PrefetchQThrShape{})) * get<1>(PrefetchQTileSize{})), // Iteration 1/K/Width/Horisontal
+                ((sub_group_id % ATOM_N) % get<1>(PrefetchQThrShape{})) * get<1>(PrefetchQTileSize{}), // Iteration 1/K/Width/Horisontal
                 blk_l_coord),
             make_shape(_1{}, _1{}, _1{}));
-    Tensor prefetch_iter_a = append_pvc_tensor<1>(prefetch_iter_2d_a, k_tile_count, BLK_K);       
+    Tensor prefetch_iter_a = append_pvc_tensor<1>(prefetch_iter_2d_a, k_tile_count, BLK_K);
       // append<4>(make_shape(_1{}, _1{}, _1{}), k_tile_count),
       // append<3>(make_shape(_, _), BLK_K), seq<0, 0, 1>{});
     // The Key point is 1 is horisontal and zero is vertical
@@ -307,10 +307,9 @@ public:
     auto iter_over_head_count = head_size / BLK_N;
     // k, n
     Tensor prefetch_iter_2d_b = params.mainloop.gmem_prefetch_k.get_pvc_tensor(
-         make_coord( (sub_group_id % ATOM_N) * get<1>(PrefetchKTileSize{}), //  iteration 1/N/W/Horisontal
-                      sub_group_id * get<0>(PrefetchKTileSize{}),            // iteration 0/K/Hight/vertical
+         make_coord(sub_group_id * get<0>(PrefetchKTileSize{}),            // iteration 0/K/Hight/vertical
+                    (sub_group_id % ATOM_N) * get<1>(PrefetchKTileSize{}), //  iteration 1/N/W/Horisontal
                     blk_l_coord),                                          // batch
-                                                             // batch
          // ?, ?, k, N swap k and n here to match cutlass
          make_shape(_1{}, _1{}, nblock_limit/*This is N*/));
           // iter_over_head_count/* This is K*/), //(frag, iter_m, iter_n, iter_k)
@@ -322,18 +321,18 @@ public:
       // Hence, the Head size is the fast moving dimention and horisontal and sequence length is vertical.
      // The prefetch only move along the sequence lenth. Here we call sequence length K since it get consumed and head size N since it stay
 
-    Tensor prefetch_iter_b = append_pvc_tensor<1>(prefetch_iter_2d_b, iter_over_head_count, BLK_N);       
+    Tensor prefetch_iter_b = append_pvc_tensor<0>(prefetch_iter_2d_b, iter_over_head_count, BLK_N);
 
     Tensor prefetch_iter_2d_v = params.mainloop.gmem_prefetch_v.get_pvc_tensor(
-         make_coord( head_size_coord,         //  iteration 1/N/W/Horisontal / Head size
-          (sub_group_id / ATOM_N) * get<0>(PrefetchVTileSize{}), // iteration 0/K/Hight/vertical/ sequence lengh
+         make_coord((sub_group_id / ATOM_N) * get<0>(PrefetchVTileSize{}), // iteration 0/K/Hight/vertical/ sequence lengh
+                    head_size_coord,         //  iteration 1/N/W/Horisontal / Head size
                     blk_l_coord),
           // We loop over the consuming dimension which is the iteration 0(N) here 
          make_shape(_1{}, _1{}, _1{}));
         //  , nblock_limit),
          // first one is to use the intrinsic along the vertical , Second one is N/M  and third one is K
         //  append<3>(make_shape(_, _), BLK_K), seq<0, 1, 0>{});
-    Tensor prefetch_iter_v = append_pvc_tensor<1>(prefetch_iter_2d_v, nblock_limit, BLK_K);       
+    Tensor prefetch_iter_v = append_pvc_tensor<0>(prefetch_iter_2d_v, nblock_limit, BLK_K);
 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < k_tile_count; i++) {
