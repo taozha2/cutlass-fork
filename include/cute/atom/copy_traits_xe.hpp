@@ -613,8 +613,8 @@ struct Copy_Traits<XE_2D_U8x16x64_LD_N, args_t...>
   using SrcLayout = Layout<Shape <_16,_8>,
                            Stride< _0,_1>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <_16,Shape <_16,  _2, _16>>,
-                           Stride<_16,Stride< _1,_256,_512>>>;
+  using DstLayout = Layout<Shape <_16,Shape <_16, _2, _2,   _8>>,
+                           Stride<_0 ,Stride<_16, _8, _256, _1>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
   template <class... ArgT>
