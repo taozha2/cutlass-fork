@@ -431,7 +431,6 @@
 
 int main(int argc, const char** argv)
 {
-/* these cases can pass
   // ++++++++++++++++  bfloat16_t  ++++++++++++++++
   {
     std::cout << "\n\n==========  bfloat16_t, RowMajor, RowMajor  ==========" << std::endl;
@@ -489,8 +488,6 @@ int main(int argc, const char** argv)
     //          float, float, float, cutlass::layout::RowMajor, cutlass::layout::ColumnMajor>(argc, argv);
   }
 
-*/
-// these cases fail
   // ++++++++++++++++  tfloat32_t  ++++++++++++++++
   {
     std::cout << "\n\n==========  tfloat32_t, RowMajor, RowMajor  ==========" << std::endl;
@@ -511,7 +508,6 @@ int main(int argc, const char** argv)
   } 
 
 
-/* these cases can pass
   // ++++++++++++++++  int8_t  ++++++++++++++++
   {
     std::cout << "\n\n==========  int8_t, RowMajor, RowMajor  ==========" << std::endl;
@@ -550,5 +546,4 @@ int main(int argc, const char** argv)
  //   run_gemm<XE_2D_U8x32x32_LD_T, XE_2D_U8x32x16_LD_T, XE_8x16x32_S32U8U8S32_TT,
  //           uint8_t, uint8_t, int32_t, cutlass::layout::ColumnMajor, cutlass::layout::ColumnMajor>(argc, argv);
   }
-*/
 }
