@@ -26,6 +26,10 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+cutlass_example_add_executable(
+  pvc_gemm_benchmark_dataype_layout
+  pvc_gemm_benchmark_dataype_layout.cpp
+)
 
 cutlass_example_add_executable(
   pvc_gemm
