@@ -1308,8 +1308,8 @@ struct Copy_Traits<XE_2D_TF32x16x8_LD_T, args_t...>
     : XE_2D_LD_Unpack<XE_2D_TF32x16x8_LD_T, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,_32>,
-                           Stride< _0, _1>>;
+  using SrcLayout = Layout<Shape <_16,Shape <_32,  _2>>,
+                           Stride< _0,Stride< _1,_512>>>;
   // Map from (dst-thr,dst-val) to bit
   using DstLayout = Layout<Shape <_16, Shape <_4, _2, _32>>,
                            Stride< _0, Stride<_512, Int<512 *4>, _1>>>;

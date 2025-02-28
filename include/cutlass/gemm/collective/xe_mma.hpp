@@ -170,50 +170,32 @@ struct CollectiveMma<MainloopIntelPVC<Stages>, TileShape_, ElementA_, StrideA_, 
 
     auto [M,N,K,L] = problem_shape;
 
+    auto tiled_copy_a = make_tiled_copy(atom_load_A{}.with(
+                                   static_cast<ElementA const*>(args.ptr_A), M, K),
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
+    auto tiled_copy_b = make_tiled_copy(atom_load_B{}.with(
+                                   static_cast<ElementB const*>(args.ptr_B), N, K),
+                                   Layout<CopyThreadShape>{},
+                                   make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
+
     auto mA_mkl = make_tensor(make_gmem_ptr(static_cast<ElementA const*>(args.ptr_A)),
                               make_layout(make_shape(M, K, L), args.dA));
 
     auto mB_nkl = make_tensor(make_gmem_ptr(static_cast<ElementB const*>(args.ptr_B)),
                               make_layout(make_shape(N, K, L), args.dB));
 
-    auto tiled_copy_a = make_tiled_copy(atom_load_A{}.with(mA_mkl),
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename traits_load_A::BlockShape{}, CopyThreadShape{})));
-    auto tiled_copy_b = make_tiled_copy(atom_load_B{}.with(mB_nkl),
-                                   Layout<CopyThreadShape>{},
-                                   make_layout(shape_div(typename traits_load_B::BlockShape{}, CopyThreadShape{})));
 
-    return Params{tiled_copy_a, tiled_copy_b, mA_mkl, mB_nkl};
-  }
-
-  /// Perform a subgroup-scoped matrix multiply-accumulate
-  template <class FrgTensorD, class TensorA, class TensorB, class FrgTensorC, class KTileIterator, class ResidueMNK,
-            class BlkCoord>
-  CUTLASS_DEVICE void operator()(FrgTensorD &accum, TensorA gA, TensorB gB, FrgTensorC const &src_accum,
-                                 KTileIterator k_tile_iter, int k_tile_count, ResidueMNK residue_mnk,
-                                 BlkCoord const &blk_coord, int const &K_start, int thread_idx, char *smem_buf,
-                                 Params const &mainloop) {
-    static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
-    static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
-
-    (void)residue_mnk;
-    (void)thread_idx;
-    (void)smem_buf;
+    Tensor tCrA = make_tensor<ElementA>(mainloop.copy_A.make_fragment_layout(tCgA(_,_,_,0).shape()));
+    Tensor tCrB = make_tensor<ElementB>(mainloop.copy_B.make_fragment_layout(tCgB(_,_,_,0).shape()));
+  
+    // Retile registers for copies
+    Tensor tArA = thr_copy_A.retile_D(tCrA);
+    Tensor tBrB = thr_copy_B.retile_D(tCrB);
     
-    auto thr_copy_A = mainloop.copy_A.get_slice(thread_idx);
-    auto thr_copy_B = mainloop.copy_B.get_slice(thread_idx);
-
-    // Instantiate the MMA object and get thread slice
-    TiledMma tiled_mma;
-    // TODO(Codeplay): see if we can make this nicer
-    // To make all work items in a subgroup have the same global tensors pass in the index of work item 0 in each subgroup
-    auto sg = syclcompat::get_nd_item<1>().get_sub_group();
-    auto first_thread_in_sg_idx = sg.get_group_linear_id() * DispatchPolicy::SubgroupSize;
-    auto thr_mma = tiled_mma.get_slice(first_thread_in_sg_idx);
-
-    // Partition
-    Tensor tCgA = thr_mma.partition_A(gA);
-    Tensor tCgB = thr_mma.partition_B(gB);
+    // Retile global tile for copies
+    Tensor tAgA = thr_copy_A.retile_S(tCgA);
+    Tensor tBgB = thr_copy_B.retile_S(tCgB);
 
     Tensor tCrA = make_tensor<ElementA>(mainloop.copy_A.make_fragment_layout(tCgA(_,_,_,0).shape()));
     Tensor tCrB = make_tensor<ElementB>(mainloop.copy_B.make_fragment_layout(tCgB(_,_,_,0).shape()));
