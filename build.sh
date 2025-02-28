@@ -51,7 +51,7 @@ export OCL_ICD_VENDORS=$HOME
 
 #target=./test/unit/cute/intel_xe/cutlass_test_unit_cute_intel_xe
 #target=./examples/sycl/pvc/pvc_gemm
-target=./examples/sycl/pvc/pvc_gemm_benchmark_dataype_layout
+target=./examples/sycl/pvc/pvc_gemm_benchmark_datatype_layout
 clear
 
 cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=${sycl_compiler_path}/bin/clang++ \
