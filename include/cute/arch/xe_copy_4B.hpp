@@ -271,7 +271,9 @@ SYCL_DEVICE_OCL(void intel_sub_group_block_write_32b_4r16c(
     cute::intel::coord_t coord, cute::intel::uint4 data));
 SYCL_DEVICE_OCL(void intel_sub_group_block_write_32b_8r16c(
     const __global void *base_address, int width, int height, int pitch,
-    cute::intel::coord_t coord, cute::intel::uint8 data));
+    intel::coord_t coord, intel::uint8 data));
+
+
 SYCL_DEVICE_OCL(void intel_sub_group_2d_block_prefetch_32b_16r8x1c(
     __global void* base_address, int width, int height, int pitch,
     cute::intel::coord_t coord));
