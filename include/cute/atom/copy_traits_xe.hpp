@@ -2216,12 +2216,8 @@ struct XePrefetchConstructor<int8_t, row> {\
   using type_t = TYPE_BITS_int8_t(row);\
 };\
 template <>\
-struct XePrefetchConstructor<uint8_t, row> {\
-  using type_t = TYPE_BITS_int8_t(row);\
-};\
-template <>\
 struct XePrefetchConstructor<tfloat32_t, row> {\
-  using type_t = TYPE_BITS_float(row);\
+using type_t = TYPE_BITS_tfloat32_t(row);\
 };\
 
 BUILD_XE_NAME(1)
