@@ -39,7 +39,7 @@ TEST(PVC_CuTe_Xe, gemm_bf16_RowMajor_RowMajor) {
       256, 128, 32, 64, 128, bfloat16_t, bfloat16_t, float,
       XE_2D_U16x16x32_LD_N, XE_2D_U16x32x32_LD_V,
       XE_2D_U32x8x16_ST_N, XE_8x16x16_F32BF16BF16F32_TT,
-      cute::LayoutRight, cute::LayoutLeft>>();
+      cute::LayoutRight, cute::LayoutLeft>>(512, 256, 1024);
 }
 
 TEST(PVC_CuTe_Xe, gemm_bf16_RowMajor_ColumnMajor) {
@@ -47,7 +47,7 @@ TEST(PVC_CuTe_Xe, gemm_bf16_RowMajor_ColumnMajor) {
       64, 128, 32, 64, 128, bfloat16_t, bfloat16_t, float,
       XE_2D_U16x16x32_LD_N, XE_2D_U16x16x16_LD_T,
       XE_2D_U32x8x16_ST_N, XE_8x16x16_F32BF16BF16F32_TT,
-      cute::LayoutRight, cute::LayoutRight>>();
+      cute::LayoutRight, cute::LayoutRight>>(128, 256, 512);
 }
 
 TEST(PVC_CuTe_Xe, gemm_bf16_ColumnMajor_RowMajor) {
@@ -55,7 +55,7 @@ TEST(PVC_CuTe_Xe, gemm_bf16_ColumnMajor_RowMajor) {
       256, 128, 32, 64, 128, bfloat16_t, bfloat16_t, float,
       XE_2D_U16x16x16_LD_T, XE_2D_U16x32x32_LD_V,
       XE_2D_U32x8x16_ST_N, XE_8x16x16_F32BF16BF16F32_TT,
-      cute::LayoutLeft, cute::LayoutLeft>>();
+      cute::LayoutLeft, cute::LayoutLeft>>(256, 512, 1024);
 }
 
 TEST(PVC_CuTe_Xe, gemm_bf16_ColumnMajor_ColumnMajor) {
@@ -63,7 +63,7 @@ TEST(PVC_CuTe_Xe, gemm_bf16_ColumnMajor_ColumnMajor) {
       128, 128, 32, 64, 128, bfloat16_t, bfloat16_t, float,
       XE_2D_U16x16x16_LD_T, XE_2D_U16x16x16_LD_T,
       XE_2D_U32x8x16_ST_N, XE_8x16x16_F32BF16BF16F32_TT,
-      cute::LayoutLeft, cute::LayoutRight>>();
+      cute::LayoutLeft, cute::LayoutRight>>(256, 512, 1024);
 }
 
 
@@ -75,7 +75,7 @@ TEST(PVC_CuTe_Xe, gemm_fp16_RowMajor_RowMajor) {
       256, 128, 32, 64, 128, half_t, half_t, float,
       XE_2D_U16x32x32_LD_N, XE_2D_U16x32x32_LD_N,
       XE_2D_U32x8x16_ST_N, XE_8x16x16_F32F16F16F32_TT,
-      cute::LayoutRight, cute::LayoutLeft>>();
+      cute::LayoutRight, cute::LayoutLeft>>(512, 256, 1024);
 }
 
 TEST(PVC_CuTe_Xe, gemm_fp16_RowMajor_ColumnMajor) {
@@ -83,7 +83,7 @@ TEST(PVC_CuTe_Xe, gemm_fp16_RowMajor_ColumnMajor) {
       64, 128, 32, 64, 128, half_t, half_t, float,
       XE_2D_U16x32x32_LD_N, XE_2D_U16x16x16_LD_T,
       XE_2D_U32x8x16_ST_N, XE_8x16x16_F32F16F16F32_TT,
-      cute::LayoutRight, cute::LayoutRight>>();
+      cute::LayoutRight, cute::LayoutRight>>(128, 256, 1024);
 }
 
 TEST(PVC_CuTe_Xe, gemm_fp16_ColumnMajor_RowMajor) {
@@ -91,7 +91,7 @@ TEST(PVC_CuTe_Xe, gemm_fp16_ColumnMajor_RowMajor) {
       256, 128, 32, 64, 128, half_t, half_t, float,
       XE_2D_U16x16x16_LD_T, XE_2D_U16x32x32_LD_V,
       XE_2D_U32x8x16_ST_N, XE_8x16x16_F32F16F16F32_TT,
-      cute::LayoutLeft, cute::LayoutLeft>>();
+      cute::LayoutLeft, cute::LayoutLeft>>(128, 256, 1024);
 }
 
 TEST(PVC_CuTe_Xe, gemm_fp16_ColumnMajor_ColumnMajor) {
@@ -99,7 +99,7 @@ TEST(PVC_CuTe_Xe, gemm_fp16_ColumnMajor_ColumnMajor) {
       128, 128, 32, 64, 128, half_t, half_t, float,
       XE_2D_U16x16x16_LD_T, XE_2D_U16x16x16_LD_T,
       XE_2D_U32x8x16_ST_N, XE_8x16x16_F32F16F16F32_TT,
-      cute::LayoutLeft, cute::LayoutRight>>();
+      cute::LayoutLeft, cute::LayoutRight>>(256, 512, 1024);
 }
 
 
@@ -111,7 +111,7 @@ TEST(PVC_CuTe_Xe, gemm_tf32_RowMajor_RowMajor) {
       256, 128, 32, 64, 128, tfloat32_t, tfloat32_t, float,
       XE_2D_TF32x32x16_LD_N, XE_2D_U32x32x16_LD_N,
       XE_2D_U32x8x16_ST_N, XE_8x16x8_F32TF32TF32F32_TT,
-      cute::LayoutRight, cute::LayoutLeft>>();
+      cute::LayoutRight, cute::LayoutLeft>>(512, 256, 1024);
 }
 
 TEST(PVC_CuTe_Xe, gemm_tf32_RowMajor_ColumnMajor) {
@@ -119,7 +119,7 @@ TEST(PVC_CuTe_Xe, gemm_tf32_RowMajor_ColumnMajor) {
       256, 128, 32, 64, 128, tfloat32_t, tfloat32_t, float,
       XE_2D_TF32x32x16_LD_N, XE_2D_U32x16x8_LD_T,
       XE_2D_U32x8x16_ST_N, XE_8x16x8_F32TF32TF32F32_TT,
-      cute::LayoutRight, cute::LayoutRight>>();
+      cute::LayoutRight, cute::LayoutRight>>(256, 256, 512);
 }
 
 #if 0  // ColumnMajor A not support now
@@ -128,7 +128,7 @@ TEST(PVC_CuTe_Xe, gemm_tf32_ColumnMajor_RowMajor) {
       256, 128, 32, 64, 128, tfloat32_t, tfloat32_t, float,
       XE_2D_TF32x16x8_LD_T, XE_2D_U32x32x16_LD_N,
       XE_2D_U32x8x16_ST_N, XE_8x16x8_F32TF32TF32F32_TT,
-      cute::LayoutLeft, cute::LayoutLeft>>();
+      cute::LayoutLeft, cute::LayoutLeft>>(256, 512, 1024);
 }
 
 TEST(PVC_CuTe_Xe, gemm_tf32_ColumnMajor_ColumnMajor) {
@@ -136,7 +136,7 @@ TEST(PVC_CuTe_Xe, gemm_tf32_ColumnMajor_ColumnMajor) {
       128, 128, 32, 64, 128, tfloat32_t, tfloat32_t, float,
       XE_2D_TF32x16x8_LD_T, XE_2D_U32x16x8_LD_T,
       XE_2D_U32x8x16_ST_N, XE_8x16x8_F32TF32TF32F32_TT,
-      cute::LayoutLeft, cute::LayoutRight>>();
+      cute::LayoutLeft, cute::LayoutRight>>(256, 512, 1024);
 }
 #endif
 
@@ -149,7 +149,7 @@ TEST(PVC_CuTe_Xe, gemm_int8_RowMajor_RowMajor) {
       256, 256, 32, 64, 32, int8_t, int8_t, int32_t,
       XE_2D_U8x32x32_LD_N, XE_2D_U8x32x32_LD_V,
       XE_2D_U32x8x16_ST_N, XE_8x16x32_S32S8S8S32_TT,
-      cute::LayoutRight, cute::LayoutLeft>>();
+      cute::LayoutRight, cute::LayoutLeft>>(512, 256, 1024);
 }
 
 TEST(PVC_CuTe_Xe, gemm_int8_RowMajor_ColumnMajor) {
@@ -157,7 +157,7 @@ TEST(PVC_CuTe_Xe, gemm_int8_RowMajor_ColumnMajor) {
       256, 256, 32, 64, 32, int8_t, int8_t, int32_t,
       XE_2D_U8x32x32_LD_N, XE_2D_U8x32x16_LD_T,
       XE_2D_U32x8x16_ST_N, XE_8x16x32_S32S8S8S32_TT,
-      cute::LayoutRight, cute::LayoutRight>>();
+      cute::LayoutRight, cute::LayoutRight>>(128, 256, 1024);
 }
 
 #if 0  // ColumnMajor A not support now
@@ -166,7 +166,7 @@ TEST(PVC_CuTe_Xe, gemm_int8_ColumnMajor_RowMajor) {
       256, 128, 32, 64, 128, int8_t, int8_t, int32_t,
       XE_2D_U8x32x32_LD_T, XE_2D_U8x32x32_LD_V,
       XE_2D_U32x8x16_ST_N, XE_8x16x32_S32S8S8S32_TT,
-      cute::LayoutLeft, cute::LayoutLeft>>();
+      cute::LayoutLeft, cute::LayoutLeft>>(256, 512, 1024);
 }
 
 TEST(PVC_CuTe_Xe, gemm_int8_ColumnMajor_ColumnMajor) {
@@ -174,7 +174,7 @@ TEST(PVC_CuTe_Xe, gemm_int8_ColumnMajor_ColumnMajor) {
       128, 128, 32, 64, 128, int8_t, int8_t, int32_t,
       XE_2D_U8x32x32_LD_T, XE_2D_U8x32x16_LD_T,
       XE_2D_U32x8x16_ST_N, XE_8x16x32_S32S8S8S32_TT,
-      cute::LayoutLeft, cute::LayoutRight>>();
+      cute::LayoutLeft, cute::LayoutRight>>(256, 512, 1024);
 }
 #endif
 
@@ -187,7 +187,7 @@ TEST(PVC_CuTe_Xe, gemm_uint8_RowMajor_RowMajor) {
       256, 256, 32, 64, 32, uint8_t, uint8_t, int32_t,
       XE_2D_U8x32x32_LD_N, XE_2D_U8x32x32_LD_V,
       XE_2D_U32x8x16_ST_N, XE_8x16x32_S32U8U8S32_TT,
-      cute::LayoutRight, cute::LayoutLeft>>();
+      cute::LayoutRight, cute::LayoutLeft>>(512, 256, 1024);
 }
 
 TEST(PVC_CuTe_Xe, gemm_uint8_RowMajor_ColumnMajor) {
@@ -195,7 +195,7 @@ TEST(PVC_CuTe_Xe, gemm_uint8_RowMajor_ColumnMajor) {
       256, 256, 32, 64, 32, uint8_t, uint8_t, int32_t,
       XE_2D_U8x32x32_LD_N, XE_2D_U8x32x16_LD_T,
       XE_2D_U32x8x16_ST_N, XE_8x16x32_S32U8U8S32_TT,
-      cute::LayoutRight, cute::LayoutRight>>();
+      cute::LayoutRight, cute::LayoutRight>>(128, 256, 1024);
 }
 
 #if 0  // ColumnMajor A not support now
@@ -204,7 +204,7 @@ TEST(PVC_CuTe_Xe, gemm_uint8_ColumnMajor_RowMajor) {
       256, 128, 32, 64, 128, uint8_t, uint8_t, int32_t,
       XE_2D_U8x32x32_LD_T, XE_2D_U8x32x32_LD_V,
       XE_2D_U32x8x16_ST_N, XE_8x16x32_S32U8U8S32_TT,
-      cute::LayoutLeft, cute::LayoutLeft>>();
+      cute::LayoutLeft, cute::LayoutLeft>>(256, 512, 1024);
 }
 
 TEST(PVC_CuTe_Xe, gemm_uint8_ColumnMajor_ColumnMajor) {
@@ -212,6 +212,6 @@ TEST(PVC_CuTe_Xe, gemm_uint8_ColumnMajor_ColumnMajor) {
       128, 128, 32, 64, 128, uint8_t, uint8_t, int32_t,
       XE_2D_U8x32x32_LD_T, XE_2D_U8x32x32_LD_V,
       XE_2D_U32x8x16_ST_N, XE_8x16x32_S32U8U8S32_TT,
-      cute::LayoutLeft, cute::LayoutRight>>();
+      cute::LayoutLeft, cute::LayoutRight>>(256, 512, 1024);
 }
 #endif
