@@ -23,24 +23,26 @@ divide_b=" -DDIV_B=1 -DR_I_CNT=1 "
 
 # https://github.com/intel/llvm/releases/tag/nightly-2024-05-16
 # https://ubit-gfx.intel.com/build/19168301/artifacts
-sycl_compiler_path=/opt/cutlass/compiler/1008/
-gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-27004/extract/
+export SYCL_COMPILER_PATH=/opt/cutlass/compiler/20250219/
+export GPU_DRIVER_PATH=/opt/cutlass/gpu_driver/agama-1077/extract/
 
 # AOT compile
 output=intel_gpu_pvc
 # jit compile
 #output=spir64
 
-
-
-export ZE_AFFINITY_MASK=0
-export CPATH=$sycl_compiler_path:$sycl_compiler_path/include/:$sycl_compiler_path/include/sycl/
-export LIBRARY_PATH=$gpu_driver_path/usr/lib/x86_64-linux-gnu/:$sycl_compiler_path/lib/
+export LIBRARY_PATH=$GPU_DRIVER_PATH/usr/lib/x86_64-linux-gnu/:$SYCL_COMPILER_PATH/lib/
 export LD_LIBRARY_PATH=$LIBRARY_PATH
+export CMAKE_CUDA_HOST_COMPILER=${SYCL_COMPILER_PATH}/bin/clang++
+export CMAKE_CXX_COMPILER=${SYCL_COMPILER_PATH}/bin/clang++
+export CUTLASS_ENABLE_SYCL=ON
+
+export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+export ZE_AFFINITY_MASK=0
+
 export IGC_EnableVISANoSchedule=1
 export IGC_ShaderDumpEnable=1
 export IGC_DumpToCustomDir=${script_dir}/build/mm_dumps
-export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
 export OCL_ICD_VENDORS=$HOME
 #export IGC_VISAOptions="-newspillcost "
 
@@ -54,10 +56,14 @@ target=./test/unit/cute/intel_xe/cutlass_test_unit_cute_intel_xe
 #target=./examples/sycl/pvc/pvc_gemm_benchmark_datatype_layout
 clear
 
-cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=${sycl_compiler_path}/bin/clang++ \
--DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=${sycl_compiler_path}/bin/clang++ \
--DCMAKE_CXX_FLAGS=" -ftarget-register-alloc-mode=pvc:large -DPREFETCH_DEFAULT -DSYCL_INTEL_TARGET ${disable_gemm} ${epilogue} ${do_validation} ${enable_prefetch} ${divide_b} -gline-tables-only " \
-&& ninja -v $target && $target --m=4096 --n=4096 --k=4096 --l=1 --iterations=20
+cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=${CMAKE_CUDA_HOST_COMPILER} \
+-DCUTLASS_ENABLE_SYCL=${CUTLASS_ENABLE_SYCL} -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} \
+-DCMAKE_CXX_FLAGS=" -ftarget-register-alloc-mode=pvc:large -DPREFETCH_DEFAULT -DSYCL_INTEL_TARGET ${disable_gemm} ${epilogue} ${do_validation} ${enable_prefetch} ${divide_b} -gline-tables-only "
+
+ninja -v $target
+
+$target --m=4096 --n=4096 --k=4096 --l=1 --iterations=20
+
 
 # -gline-tables-only
 
