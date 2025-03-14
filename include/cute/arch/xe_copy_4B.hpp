@@ -158,6 +158,11 @@ SYCL_DEVICE_BUILTIN(
         long baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 
+SYCL_DEVICE_BUILTIN(
+    cute::intel::uint16 __builtin_IB_subgroup_block_read_cacheopts_transpose_u32_m32k8(
+        long baseoffset, int width_minus_one, int height_minus_one,
+        int pitch_minus_one, cute::intel::coord_t coord));
+
 // 32bits
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u32_m1k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
@@ -171,6 +176,11 @@ SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u32_m4k16v1(
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u32_m8k16v1(
     long baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord, cute::intel::uint8 data));
+
+// 32 bits prefetch
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u32_m16k16v1(
+    long baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, cute::intel::coord_t coord, CacheControl cat));
 
 #undef SYCL_DEVICE_BUILTIN
 
