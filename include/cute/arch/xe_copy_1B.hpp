@@ -444,8 +444,6 @@ struct XE_2D_U4x32x64_LD_N {
 
       auto remote_ptr = reinterpret_cast<format_type*>(remote_dst);
 
-      #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
-
       #pragma unroll
       for (int row = 0; row < copy_H; row++) {
         auto dst_idx = row + cw * copy_H;
@@ -453,15 +451,20 @@ struct XE_2D_U4x32x64_LD_N {
         dst_tmp[dst_idx / scalar] |= ((remote_ptr[src_idx/ scalar]
                                        << ((scalar - 1 - (src_idx % scalar)) * scalar)) & left_4bits_mask)
                                        >> ((dst_idx % scalar) * scalar);
-        // if (thread0() && (dst_idx / scalar) == 1) {
-        //   PRINT_S(dst_idx);
-        //   PRINT_S(src_idx);
-        //   PRINT_S((int)remote_ptr[src_idx/ scalar]);
-        //   PRINT_S((int)remote_dst_iter[src_idx].get());
-        //   PRINT_S((remote_ptr[src_idx/ scalar] << ((scalar - 1 - (src_idx % scalar)) * scalar) & 0xf000) >> ((dst_idx % scalar) * scalar));
-        //   PRINT_S((int)dst_tmp[dst_idx / scalar]);
-        //   print("\n");
-        // }
+#if 0
+        if (thread0() && (dst_idx / scalar) == 1) {
+          #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
+          cute::subbyte_iterator<T> remote_dst_iter(remote_dst);
+
+          PRINT_S(dst_idx);
+          PRINT_S(src_idx);
+          PRINT_S((int)remote_ptr[src_idx/ scalar]);
+          PRINT_S((int)remote_dst_iter[src_idx].get());
+          PRINT_S((remote_ptr[src_idx/ scalar] << ((scalar - 1 - (src_idx % scalar)) * scalar) & 0xf000) >> ((dst_idx % scalar) * scalar));
+          PRINT_S((int)dst_tmp[dst_idx / scalar]);
+          print("\n");
+        }
+#endif
       }
     }
 
@@ -524,8 +527,6 @@ struct XE_2D_U4x16x64_LD_N {
 
       auto remote_ptr = reinterpret_cast<format_type*>(&remote_dst);
 
-      #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
-
       #pragma unroll
       for (int row = 0; row < copy_H; row++) {
         auto dst_idx = row + cw * copy_H;
@@ -533,15 +534,20 @@ struct XE_2D_U4x16x64_LD_N {
         dst_tmp[dst_idx / scalar] |= ((remote_ptr[src_idx/ scalar]
                                        << ((scalar - 1 - (src_idx % scalar)) * scalar)) & left_4bits_mask)
                                        >> ((dst_idx % scalar) * scalar);
-        // if (thread0() && (dst_idx / scalar) == 1) {
-        //   PRINT_S(dst_idx);
-        //   PRINT_S(src_idx);
-        //   PRINT_S((int)remote_ptr[src_idx/ scalar]);
-        //   PRINT_S((int)remote_dst_iter[src_idx].get());
-        //   PRINT_S((remote_ptr[src_idx/ scalar] << ((scalar - 1 - (src_idx % scalar)) * scalar) & 0xf000) >> ((dst_idx % scalar) * scalar));
-        //   PRINT_S((int)dst_tmp[dst_idx / scalar]);
-        //   print("\n");
-        // }
+#if 0
+        if (thread0() && (dst_idx / scalar) == 1) {
+          #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
+          cute::subbyte_iterator<T> remote_dst_iter(&remote_dst);
+
+          PRINT_S(dst_idx);
+          PRINT_S(src_idx);
+          PRINT_S((int)remote_ptr[src_idx/ scalar]);
+          PRINT_S((int)remote_dst_iter[src_idx].get());
+          PRINT_S((remote_ptr[src_idx/ scalar] << ((scalar - 1 - (src_idx % scalar)) * scalar) & 0xf000) >> ((dst_idx % scalar) * scalar));
+          PRINT_S((int)dst_tmp[dst_idx / scalar]);
+          print("\n");
+        }
+#endif
       }
     }
 
