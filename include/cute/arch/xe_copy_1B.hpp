@@ -419,6 +419,7 @@ struct XE_2D_U4x32x64_LD_N {
    // FIXME: the performance of shuffle algorithm here is too bad, we are working with
    // compiler/IGC team to optimize it.
 
+#if 1
     static constexpr auto subgroup_size = 16;
     static constexpr auto copy_W = decltype(size<1>(BlockShape{}))::value / subgroup_size;
     static constexpr auto copy_H = decltype(size<0>(BlockShape{}))::value;
@@ -469,14 +470,6 @@ struct XE_2D_U4x32x64_LD_N {
     }
 
    *reinterpret_cast<intel::ushort32 *>(dst) = *reinterpret_cast<intel::ushort32 *>(dst_tmp);
-
-#if 0
-    if (cute::thread(3, 1)) {
-        print("XE_2D_U4x32x64_LD_N, ret: \n");
-      for (int i =0; i < (copy_W * copy_H); i++ ) {
-        print(i); print(",  "); print((float)(dst_iter[i].get())); print("\n");
-      }
-    }
 #endif
 
 #else
@@ -552,15 +545,6 @@ struct XE_2D_U4x16x64_LD_N {
     }
 
    *reinterpret_cast<intel::ushort16 *>(dst) = *reinterpret_cast<intel::ushort16 *>(dst_tmp);
-#endif
-
-#if 0
-    if (cute::thread(3, 1)) {
-        print("XE_2D_U4x16x64_LD_N, ret: \n");
-      for (int i =0; i < (copy_W * copy_H); i++ ) {
-        print(i); print(",  "); print((float)(dst_iter[i].get())); print("\n");
-      }
-    }
 #endif
 
 #else
