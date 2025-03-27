@@ -71,7 +71,7 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
   rng.seed(seed);
 
   using Limits = cutlass::platform::numeric_limits<T1>;
-  std::uniform_int_distribution<> dist(Limits::lowest(), Limits::max());
+  std::uniform_int_distribution<> dist(-7, 7);//Limits::lowest(), Limits::max());
 
   if constexpr (cute::sizeof_bits_v<T1> >= 8) {
     auto block_host = std::vector<T1>(block_device.size());
@@ -91,7 +91,7 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
 
     for (int i = 0; i < block_host.size(); ++i) {
       block_host[i] = static_cast<T1>(dist(rng));
-      block_host_dq[i] = static_cast<T2>(block_host[i].get());
+      block_host_dq[i] = static_cast<T2>((short)(block_host[i].get()));
     }
 
     static constexpr auto elements_per_byte = cute::sizeof_bits_v<int8_t> / cute::sizeof_bits_v<T1>;

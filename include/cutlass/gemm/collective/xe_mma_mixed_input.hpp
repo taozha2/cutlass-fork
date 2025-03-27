@@ -209,7 +209,7 @@ struct CollectiveMma<
 
       auto out = make_fragment_like<DstType>(in);
 
-#if 0
+#if 1
       // TODO: hard code for test
      #pragma unroll
       for (int i = 0; i < decltype(size(out))::value; i++) {
