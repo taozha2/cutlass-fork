@@ -218,7 +218,7 @@ struct CollectiveMma<
 
 #else
 
-      using format_type = uint;
+      using format_type = ushort;
       static constexpr auto src_bits = sizeof_bits_v<SrcType>;
       static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
       auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
