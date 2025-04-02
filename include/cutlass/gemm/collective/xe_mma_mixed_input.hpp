@@ -208,6 +208,7 @@ struct CollectiveMma<
       // hardcode here for functionality test, will remove this branch in the future.
 
       auto out = make_fragment_like<DstType>(in);
+      auto tmp = recast<int>(out);
 
 #if 0
       // TODO: hard code for test
@@ -222,14 +223,16 @@ struct CollectiveMma<
       static constexpr auto src_bits = sizeof_bits_v<SrcType>;
       static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
       auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
-      auto dst_ptr = out.data();
+      auto dst_ptr = tmp.data();
 
       #pragma unroll
       for (int i = 0; i < (decltype(size(out))::value / scalar); i++) {
         #pragma unroll
-        for (int j = 0; j < scalar; j++) {
-          dst_ptr[i * scalar + j] = static_cast<DstType>((short)(static_cast<SrcType>(
-            (src_ptr[i] >> (src_bits * j)) & 0xf)));
+        for (int j = 0; j < 2; j++) {
+          using namespace cutlass::platform;
+          dst_ptr[i * 2 + j] = (bit_cast<short>(static_cast<DstType>((short)(static_cast<SrcType>(
+            (src_ptr[i] >> (src_bits * j * 2)) & 0xf))))) | (bit_cast<short>(static_cast<DstType>((short)(static_cast<SrcType>(
+              (src_ptr[i] >> (src_bits * (j*2+1))) & 0xf)))) << 16);
           // if (thread0() && i == 1) {
           //   PRINT_S(i);
           //   PRINT_S(src_ptr[i]);
