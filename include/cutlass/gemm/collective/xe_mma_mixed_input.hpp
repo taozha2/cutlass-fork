@@ -230,8 +230,8 @@ struct CollectiveMma<
         #pragma unroll
         for (int j = 0; j < 2; j++) {
           using namespace cutlass::platform;
-          dst_ptr[i * 2 + j] = (bit_cast<short>(static_cast<DstType>((short)(static_cast<SrcType>(
-            (src_ptr[i] >> (src_bits * j * 2)) & 0xf))))) | (bit_cast<short>(static_cast<DstType>((short)(static_cast<SrcType>(
+          dst_ptr[i * 2 + j] = (bit_cast<short>(static_cast<_Float16>((short)(static_cast<SrcType>(
+            (src_ptr[i] >> (src_bits * j * 2)) & 0xf))))) | (bit_cast<short>(static_cast<_Float16>((short)(static_cast<SrcType>(
               (src_ptr[i] >> (src_bits * (j*2+1))) & 0xf)))) << 16);
           // if (thread0() && i == 1) {
           //   PRINT_S(i);
