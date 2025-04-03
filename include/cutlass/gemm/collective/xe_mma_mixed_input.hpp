@@ -396,13 +396,13 @@ struct CollectiveMma<
       copy(tiled_copy_a, tAgA(_,_,_,k), tArA);
       copy(tiled_copy_b, tBgB(_,_,_,k), tBrB);
 
-      auto mma_A = transform_if_needed<MmaType>(tCrA);
-      auto mma_B = transform_if_needed<MmaType>(tCrB);
-
       if(prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
       }
+
+      auto mma_A = transform_if_needed<MmaType>(tCrA);
+      auto mma_B = transform_if_needed<MmaType>(tCrB);
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
     }
