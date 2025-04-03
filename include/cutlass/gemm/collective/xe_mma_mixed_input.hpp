@@ -209,7 +209,6 @@ struct CollectiveMma<
 
       auto out = make_fragment_like<DstType>(in);
       auto tmp = recast<int>(out);
-
 #if 0
       // TODO: hard code for test
      #pragma unroll
@@ -227,12 +226,20 @@ struct CollectiveMma<
 
       #pragma unroll
       for (int i = 0; i < (decltype(size(out))::value / scalar); i++) {
-        #pragma unroll
-        for (int j = 0; j < 2; j++) {
-          using namespace cutlass::platform;
-          dst_ptr[i * 2 + j] = (bit_cast<short>(static_cast<_Float16>((short)(static_cast<SrcType>(
-            (src_ptr[i] >> (src_bits * j * 2)) & 0xf))))) | (bit_cast<short>(static_cast<_Float16>((short)(static_cast<SrcType>(
-              (src_ptr[i] >> (src_bits * (j*2+1))) & 0xf)))) << 16);
+        auto first_shift0 = (src_ptr[i] >> (src_bits * 0 * 2)) & 0xf;
+        auto first_shift1 = (src_ptr[i] >> (src_bits * 1 * 2)) & 0xf;
+        auto second_shift0 = (src_ptr[i] >> (src_bits * (0 * 2 + 1))) & 0xf;
+        auto second_shift1 = (src_ptr[i] >> (src_bits * (1 * 2 + 1))) & 0xf;
+
+        using namespace cutlass::platform;
+        auto first_half0 = bit_cast<short>(static_cast<_Float16>((short)(static_cast<SrcType>(first_shift0))));
+        auto first_half1 = bit_cast<short>(static_cast<_Float16>((short)(static_cast<SrcType>(first_shift1))));
+        auto second_half0 = bit_cast<short>(static_cast<_Float16>((short)(static_cast<SrcType>(second_shift0))));
+        auto second_half1 = bit_cast<short>(static_cast<_Float16>((short)(static_cast<SrcType>(second_shift1))));
+
+        dst_ptr[i * 2 + 0] =  first_half0 | (second_half0 << 16);
+        dst_ptr[i * 2 + 1] =  first_half1 | (second_half1 << 16);
+
           // if (thread0() && i == 1) {
           //   PRINT_S(i);
           //   PRINT_S(src_ptr[i]);
@@ -240,7 +247,6 @@ struct CollectiveMma<
           //   PRINT_S((int)dst_ptr[i * scalar + j]);
           //   print("\n\n");
           // }
-        }
       }
       #endif
 
