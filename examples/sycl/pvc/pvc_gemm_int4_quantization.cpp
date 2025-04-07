@@ -364,17 +364,17 @@ int main(int argc, const char** argv)
   using LayoutD = cutlass::layout::RowMajor;
 
   // Note: XE_2D_U4x32x64_LD_N is incompatible with our bf16 MMA atoms
-  using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-  using GmemTiledCopyB = XE_2D_U4x32x64_LD_N;
+  using GmemTiledCopyA = XE_2D_U16x32x16_LD_N;
+  using GmemTiledCopyB = XE_2D_U4x16x64_LD_N;
 
   // Workgroup-level tile
-  using TileShape = Shape<_256, _256, _32>;
+  using TileShape = Shape<_256, _256, _16>;
 
   using TiledMma =
     TiledMMA<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>,
               Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>,
               Tile<Layout<Shape<_8, _8, _4>, Stride<_1, _32, _8>>,
-                  Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _32>>;
+                  Layout<Shape<_16, _4, _4>, Stride<_1, _64, _16>>, _16>>;
 
   constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCMixedPrecision<PipelineStages>;
