@@ -395,7 +395,7 @@ int main(int argc, const char** argv)
           FusionCallBacks,
           XE_2D_U32x8x16_LD_N,
           void, void,
-          XE_2D_U32x8x16_ST_N,
+          void,
           void, void>;
 
   // Mainloop

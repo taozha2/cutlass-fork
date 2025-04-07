@@ -207,8 +207,6 @@ struct CollectiveMma<
       // TODO: Current NumericArrayConverter doesn't work for int4 on intel Xe, just workaround and
       // hardcode here for functionality test, will remove this branch in the future.
 
-      auto out = make_fragment_like<DstType>(in);
-      auto tmp = recast<int>(out);
 #if 0
       // TODO: hard code for test
      #pragma unroll
@@ -218,11 +216,27 @@ struct CollectiveMma<
 
 #else
 
-      using format_type = ushort;
+#if 1
+      auto out = make_fragment_like<DstType>(in);
+      auto dst_ptr = raw_pointer_cast(out.data());
+      using format_type = short;
       static constexpr auto src_bits = sizeof_bits_v<SrcType>;
       static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
       auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
-      auto dst_ptr = tmp.data();
+      static constexpr auto loop_cnt = decltype(size(out))::value / scalar;
+
+      #pragma unroll
+      for (int j = 0; j < scalar; j++) {
+        #pragma unroll
+        for (int i = 0; i < loop_cnt; i++) {    
+          dst_ptr[i  + j * loop_cnt] = static_cast<DstType>((short)(static_cast<SrcType>(
+            (src_ptr[i] >> (src_bits * j)) & 0xf)));
+        }
+      }
+#else
+
+      auto out = make_fragment_like<DstType>(in);
+      auto tmp = recast<int>(out);
 
       #pragma unroll
       for (int i = 0; i < (decltype(size(out))::value / scalar); i++) {
@@ -248,7 +262,8 @@ struct CollectiveMma<
           //   print("\n\n");
           // }
       }
-      #endif
+#endif
+#endif
 
       return out;
     } else {
