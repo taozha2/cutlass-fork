@@ -231,8 +231,8 @@ struct CollectiveMma<
       for (int j = 0; j < scalar; j++) {
         #pragma unroll
         for (int i = 0; i < (loop_cnt / 2); i++) {
-          auto first_half = bit_cast<ushort>(static_cast<DstType>((short)(static_cast<SrcType>((src_ptr[2*i] >> (src_bits * j)) & 0xf))));
-          auto second_half = bit_cast<ushort>(static_cast<DstType>((short)(static_cast<SrcType>((src_ptr[2*i +1] >> (src_bits * j)) & 0xf))));
+          auto first_half = bit_cast<ushort>(static_cast<_Float16>((short)(static_cast<SrcType>((src_ptr[2*i] >> (src_bits * j)) & 0xf))));
+          auto second_half = bit_cast<ushort>(static_cast<_Float16>((short)(static_cast<SrcType>((src_ptr[2*i +1] >> (src_bits * j)) & 0xf))));
           dst_int[i + j * loop_cnt / 2] = first_half | (second_half << 16);
         }
       }
