@@ -219,18 +219,21 @@ struct CollectiveMma<
 #if 1
       auto out = make_fragment_like<DstType>(in);
       auto dst_ptr = raw_pointer_cast(out.data());
-      using format_type = short;
+      auto dst_int = reinterpret_cast<uint*>(dst_ptr);
+      using format_type = ushort;
       static constexpr auto src_bits = sizeof_bits_v<SrcType>;
       static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
       auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
       static constexpr auto loop_cnt = decltype(size(out))::value / scalar;
 
+      using namespace cutlass::platform;
       #pragma unroll
       for (int j = 0; j < scalar; j++) {
         #pragma unroll
-        for (int i = 0; i < loop_cnt; i++) {    
-          dst_ptr[i  + j * loop_cnt] = static_cast<DstType>((short)(static_cast<SrcType>(
-            (src_ptr[i] >> (src_bits * j)) & 0xf)));
+        for (int i = 0; i < (loop_cnt / 2); i++) {
+          auto first_half = bit_cast<ushort>(static_cast<DstType>((short)(static_cast<SrcType>((src_ptr[2*i] >> (src_bits * j)) & 0xf))));
+          auto second_half = bit_cast<ushort>(static_cast<DstType>((short)(static_cast<SrcType>((src_ptr[2*i +1] >> (src_bits * j)) & 0xf))));
+          dst_int[i + j * loop_cnt / 2] = first_half | (second_half << 16);
         }
       }
 #else
