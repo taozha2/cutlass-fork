@@ -216,17 +216,29 @@ struct CollectiveMma<
 
 #else
 
-#if 1
       auto out = make_fragment_like<DstType>(in);
-      auto dst_ptr = raw_pointer_cast(out.data());
-      auto dst_int = reinterpret_cast<uint*>(dst_ptr);
-      using format_type = ushort;
+      using format_type = short;
       static constexpr auto src_bits = sizeof_bits_v<SrcType>;
       static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
       auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
       static constexpr auto loop_cnt = decltype(size(out))::value / scalar;
-
       using namespace cutlass::platform;
+
+#define ALGORITHM 0
+
+#if ALGORITHM == 0
+      auto&& dst_ptr = *(intel::ushort64*)(out.data());
+      #pragma unroll
+      for (int j = 0; j < scalar; j++) {
+        #pragma unroll
+        for (int i = 0; i < loop_cnt; i++) {
+          dst_ptr[i  + j * loop_cnt] = bit_cast<ushort>(static_cast<DstType>((short)(static_cast<SrcType>(
+            (src_ptr[i] >> (src_bits * j)) & 0xf))));
+        }
+      }
+#elif ALGORITHM == 1
+      auto dst_ptr = out.data();
+      auto dst_int = reinterpret_cast<uint*>(dst_ptr);
       #pragma unroll
       for (int j = 0; j < scalar; j++) {
         #pragma unroll
@@ -235,35 +247,6 @@ struct CollectiveMma<
           auto second_half = bit_cast<ushort>(static_cast<_Float16>((short)(static_cast<SrcType>((src_ptr[2*i +1] >> (src_bits * j)) & 0xf))));
           dst_int[i + j * loop_cnt / 2] = first_half | (second_half << 16);
         }
-      }
-#else
-
-      auto out = make_fragment_like<DstType>(in);
-      auto tmp = recast<int>(out);
-
-      #pragma unroll
-      for (int i = 0; i < (decltype(size(out))::value / scalar); i++) {
-        auto first_shift0 = (src_ptr[i] >> (src_bits * 0 * 2)) & 0xf;
-        auto first_shift1 = (src_ptr[i] >> (src_bits * 1 * 2)) & 0xf;
-        auto second_shift0 = (src_ptr[i] >> (src_bits * (0 * 2 + 1))) & 0xf;
-        auto second_shift1 = (src_ptr[i] >> (src_bits * (1 * 2 + 1))) & 0xf;
-
-        using namespace cutlass::platform;
-        auto first_half0 = bit_cast<short>(static_cast<_Float16>((short)(static_cast<SrcType>(first_shift0))));
-        auto first_half1 = bit_cast<short>(static_cast<_Float16>((short)(static_cast<SrcType>(first_shift1))));
-        auto second_half0 = bit_cast<short>(static_cast<_Float16>((short)(static_cast<SrcType>(second_shift0))));
-        auto second_half1 = bit_cast<short>(static_cast<_Float16>((short)(static_cast<SrcType>(second_shift1))));
-
-        dst_ptr[i * 2 + 0] =  first_half0 | (second_half0 << 16);
-        dst_ptr[i * 2 + 1] =  first_half1 | (second_half1 << 16);
-
-          // if (thread0() && i == 1) {
-          //   PRINT_S(i);
-          //   PRINT_S(src_ptr[i]);
-          //   PRINT_S((int)(src_ptr[i * scalar + j].get()));
-          //   PRINT_S((int)dst_ptr[i * scalar + j]);
-          //   print("\n\n");
-          // }
       }
 #endif
 #endif
