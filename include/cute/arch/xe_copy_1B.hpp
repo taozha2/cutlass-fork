@@ -495,6 +495,7 @@ struct XE_2D_U4x32x64_LD_N {
         __builtin_IB_subgroup_block_read_flat_u8_m32k32v1(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 
+#if 0
    // ================= shuffle begin =================
    // FIXME: the performance of shuffle algorithm here is too bad, we are working with
    // compiler/IGC team to optimize it.
@@ -506,27 +507,57 @@ struct XE_2D_U4x32x64_LD_N {
     auto sg = syclcompat::get_nd_item<1>().get_sub_group();
     auto id = int(ThreadIdxX()) % subgroup_size;
 
-    cute::subbyte_iterator<int4_t> dst_iter(dst);
-    cute::array_subbyte<int4_t, copy_W * copy_H> dst_tmp{};
+    static_assert(sizeof_bits_v<T> == 4);
+
+    using format_type = ushort;
+    static constexpr auto left_4bits_mask = 0xf000;
+    static constexpr auto scalar = sizeof_bits_v<format_type> / sizeof_bits_v<T>;
+
+    format_type dst_tmp[(copy_W * copy_H) / scalar] = {0};
 
     #pragma unroll
     for (int cw = 0; cw < copy_W; cw++) {
       auto remote_id = (id + cw * subgroup_size) / copy_W;
 
-      // TODO: select 'ushort32' will cause compiling error, use 'ushort16' instead, why?
       intel::ushort16 remote_dst[2];
       remote_dst[0] = sycl::select_from_group(sg, *(reinterpret_cast<intel::ushort16 *>(dst)), remote_id);
       remote_dst[1] = sycl::select_from_group(sg, *((reinterpret_cast<intel::ushort16 *>(dst)) + 1), remote_id);
 
-      cute::subbyte_iterator<int4_t> remote_dst_iter(remote_dst);
+      auto remote_ptr = reinterpret_cast<format_type*>(remote_dst);
+
+      #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
 
       #pragma unroll
       for (int row = 0; row < copy_H; row++) {
-        dst_tmp[row + cw * copy_H] = remote_dst_iter[row * copy_W + id % copy_W].get();
+        auto dst_idx = row + cw * copy_H;
+        auto src_idx = row * copy_W + id % copy_W;
+        dst_tmp[dst_idx / scalar] |= ((remote_ptr[src_idx/ scalar]
+                                       << ((scalar - 1 - (src_idx % scalar)) * scalar)) & left_4bits_mask)
+                                       >> ((dst_idx % scalar) * scalar);
+        // if (thread0() && (dst_idx / scalar) == 1) {
+        //   PRINT_S(dst_idx);
+        //   PRINT_S(src_idx);
+        //   PRINT_S((int)remote_ptr[src_idx/ scalar]);
+        //   PRINT_S((int)remote_dst_iter[src_idx].get());
+        //   PRINT_S((remote_ptr[src_idx/ scalar] << ((scalar - 1 - (src_idx % scalar)) * scalar) & 0xf000) >> ((dst_idx % scalar) * scalar));
+        //   PRINT_S((int)dst_tmp[dst_idx / scalar]);
+        //   print("\n");
+        // }
       }
     }
 
-   *reinterpret_cast<intel::ushort32 *>(cute::raw_pointer_cast(dst_iter)) = *reinterpret_cast<intel::ushort32 *>(cute::raw_pointer_cast(dst_tmp.begin()));
+   *reinterpret_cast<intel::ushort32 *>(dst) = *reinterpret_cast<intel::ushort32 *>(dst_tmp);
+#endif
+
+#if 0
+    if (cute::thread(3, 1)) {
+        print("XE_2D_U4x32x64_LD_N, ret: \n");
+      for (int i =0; i < (copy_W * copy_H); i++ ) {
+        print(i); print(",  "); print((float)(dst_iter[i].get())); print("\n");
+      }
+    }
+#endif
+
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
 #endif
@@ -547,6 +578,7 @@ struct XE_2D_U4x16x64_LD_N {
         __builtin_IB_subgroup_block_read_flat_u8_m16k32v1(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 
+#if 0
    // ================= shuffle begin =================
    // FIXME: the performance of shuffle algorithm here is too bad, we are working with
    // compiler/IGC team to optimize it.
@@ -558,8 +590,13 @@ struct XE_2D_U4x16x64_LD_N {
     auto sg = syclcompat::get_nd_item<1>().get_sub_group();
     auto id = int(ThreadIdxX()) % subgroup_size;
 
-    cute::subbyte_iterator<int4_t> dst_iter(dst);
-    cute::array_subbyte<int4_t, copy_W * copy_H> dst_tmp{};
+    static_assert(sizeof_bits_v<T> == 4);
+
+    using format_type = ushort;
+    static constexpr auto left_4bits_mask = 0xf000;
+    static constexpr auto scalar = sizeof_bits_v<format_type> / sizeof_bits_v<T>;
+
+    format_type dst_tmp[(copy_W * copy_H) / scalar] = {0};
 
     #pragma unroll
     for (int cw = 0; cw < copy_W; cw++) {
@@ -568,16 +605,41 @@ struct XE_2D_U4x16x64_LD_N {
       intel::ushort16 remote_dst;
       remote_dst = sycl::select_from_group(sg, *(reinterpret_cast<intel::ushort16 *>(dst)), remote_id);
 
-      cute::subbyte_iterator<int4_t> remote_dst_iter(&remote_dst);
+      auto remote_ptr = reinterpret_cast<format_type*>(&remote_dst);
 
+      #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
 
       #pragma unroll
       for (int row = 0; row < copy_H; row++) {
-        dst_tmp[row + cw * copy_H] = remote_dst_iter[row * copy_W + id % copy_W].get();
+        auto dst_idx = row + cw * copy_H;
+        auto src_idx = row * copy_W + id % copy_W;
+        dst_tmp[dst_idx / scalar] |= ((remote_ptr[src_idx/ scalar]
+                                       << ((scalar - 1 - (src_idx % scalar)) * scalar)) & left_4bits_mask)
+                                       >> ((dst_idx % scalar) * scalar);
+        // if (thread0() && (dst_idx / scalar) == 1) {
+        //   PRINT_S(dst_idx);
+        //   PRINT_S(src_idx);
+        //   PRINT_S((int)remote_ptr[src_idx/ scalar]);
+        //   PRINT_S((int)remote_dst_iter[src_idx].get());
+        //   PRINT_S((remote_ptr[src_idx/ scalar] << ((scalar - 1 - (src_idx % scalar)) * scalar) & 0xf000) >> ((dst_idx % scalar) * scalar));
+        //   PRINT_S((int)dst_tmp[dst_idx / scalar]);
+        //   print("\n");
+        // }
       }
     }
 
-   *reinterpret_cast<intel::ushort16 *>(cute::raw_pointer_cast(dst_iter)) = *reinterpret_cast<intel::ushort16 *>(cute::raw_pointer_cast(dst_tmp.begin()));
+   *reinterpret_cast<intel::ushort16 *>(dst) = *reinterpret_cast<intel::ushort16 *>(dst_tmp);
+#endif
+
+#if 0
+    if (cute::thread(3, 1)) {
+        print("XE_2D_U4x16x64_LD_N, ret: \n");
+      for (int i =0; i < (copy_W * copy_H); i++ ) {
+        print(i); print(",  "); print((float)(dst_iter[i].get())); print("\n");
+      }
+    }
+#endif
+
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
 #endif
