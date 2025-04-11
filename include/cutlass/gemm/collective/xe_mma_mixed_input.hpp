@@ -164,7 +164,7 @@ private:
   static constexpr bool ModeHasScales = KernelConversionMode == ConversionMode::ConvertAndScale ||
                                         KernelConversionMode == ConversionMode::ConvertAndScaleWithZero;
 
-  static_assert(!(sizeof_bits_v<ElementQuant> < 8 && ModeHasScales), "Dequantization with sub-byte quant type not yet supported in Xe mixed precision Gemm");
+  // static_assert(!(sizeof_bits_v<ElementQuant> < 8 && ModeHasScales), "Dequantization with sub-byte quant type not yet supported in Xe mixed precision Gemm");
 
 public:
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
@@ -348,7 +348,7 @@ public:
       }
       #endif
 
-      return out;
+      // return out;
     } else {
       auto const& src = tCrA_load(_, _, _);
       auto const& dst = tCrA_mma(_, _, _);

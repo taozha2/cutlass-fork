@@ -77,7 +77,7 @@ enum GemmMode {
 };
 
 using MmaType = bfloat16_t;
-using QuantType = cutlass::int8_t;
+using QuantType = _BitInt(4);
 
 // Command line options parsing
 struct Options {
@@ -117,9 +117,11 @@ struct Options {
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
-    if (cmd.check_cmd_line_flag("a_narrower")) {
-      a_narrower = true;
-    }
+    a_narrower = false;
+
+    // if (cmd.check_cmd_line_flag("a_narrower")) {
+    //   a_narrower = true;
+    // }
   }
 
   /// Prints the usage statement.
@@ -328,7 +330,9 @@ struct ExampleRunner {
       block.copy_from_host(stage.data());
     } 
     else {
-      float elt_max_f = float(cutlass::platform::numeric_limits<ElementQuant>::max());
+      // initialize_subbyte_block(block, seed + 2025);
+
+      float elt_max_f = float(7/*cutlass::platform::numeric_limits<ElementQuant>::max()*/);
       const float max_dequant_val = 4.f;
       const float min_dequant_val = 0.5f;
 
@@ -347,6 +351,8 @@ struct ExampleRunner {
     Options const& options) {
     
     if (options.mode == GemmMode::ConvertAndScaleWithZeroPoint) {
+      // initialize_subbyte_block(block, seed + 2025);
+
       cutlass::reference::device::BlockFillRandomUniform(
         block.get(), block.size(), seed, Element(2.0f), Element(-2.0f));
     } else {
@@ -518,7 +524,7 @@ int main(int argc, const char** argv)
   using ElementScale = MmaType;
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
-  using GmemTiledCopyA = XE_2D_U8x32x32_LD_V;
+  using GmemTiledCopyA = XE_2D_U4x32x64_LD_N;
   using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 
@@ -548,7 +554,7 @@ int main(int argc, const char** argv)
           FusionCallBacks,
           XE_2D_U32x8x16_LD_N,
           void, void,
-          XE_2D_U32x8x16_ST_N,
+          void,
           void, void>;
 
   // Use the helpers to avoid template arg repetition
@@ -605,17 +611,17 @@ int main(int argc, const char** argv)
           MainloopBConvertAndScaleWithZeroPoint>;
 
   if(options.a_narrower){
-    std::cout << "Setting A as narrower type" << std::endl;
-    if(options.mode ==  GemmMode::ConvertOnly) {
-      std::cout << "Running in ConvertOnly mode." << std::endl;
-      CUTLASS_CHECK(ExampleRunner<GemmAConvertOnly>{}.run(options, hw_info));
-    }else if(options.mode == GemmMode::ConvertAndScale){
-      std::cout << "Running in ConvertAndScale mode." << std::endl;
-      CUTLASS_CHECK(ExampleRunner<GemmAConvertAndScale>{}.run(options, hw_info));
-    }else{
-      std::cout << "Running in ConvertAndScaleWithZeroPoint mode." << std::endl;
-      CUTLASS_CHECK(ExampleRunner<GemmAConvertAndScaleWithZeroPoint>{}.run(options, hw_info));
-    }
+    // std::cout << "Setting A as narrower type" << std::endl;
+    // if(options.mode ==  GemmMode::ConvertOnly) {
+    //   std::cout << "Running in ConvertOnly mode." << std::endl;
+    //   CUTLASS_CHECK(ExampleRunner<GemmAConvertOnly>{}.run(options, hw_info));
+    // }else if(options.mode == GemmMode::ConvertAndScale){
+    //   std::cout << "Running in ConvertAndScale mode." << std::endl;
+    //   CUTLASS_CHECK(ExampleRunner<GemmAConvertAndScale>{}.run(options, hw_info));
+    // }else{
+    //   std::cout << "Running in ConvertAndScaleWithZeroPoint mode." << std::endl;
+    //   CUTLASS_CHECK(ExampleRunner<GemmAConvertAndScaleWithZeroPoint>{}.run(options, hw_info));
+    // }
   }else{
     std::cout << "Setting B as narrower type" << std::endl;
     if(options.mode ==  GemmMode::ConvertOnly) {
