@@ -323,25 +323,45 @@ public:
         out[i] = static_cast<DstType>(static_cast<int16_t>(in[i]));
       }
 #else
-      using format_type = short;
+      using format_type = int8_t;
       static constexpr auto src_bits = sizeof_bits_v<SrcType>;
       static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
       auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
-      static constexpr auto loop_cnt = decltype(size(out))::value / scalar;
+      static constexpr auto loop_cnt = decltype(size<0>(out))::value;
+      static constexpr auto v_cnt = decltype(size(out))::value / scalar / loop_cnt;
+
       using namespace cutlass::platform;
 
+      static_assert(loop_cnt == 16);
 #define ALGORITHM 0
+
+// if(cutlass::thread(0, 0)) {
+//   PRINT_S(in);
+//   for (int i = 0; i < size(in); i++) {
+//     PRINT_S((short)(in[i].get()));
+//   }
+// }
 
 #if ALGORITHM == 0
       auto&& dst_ptr = *(intel::ushort64*)(out.data());
       #pragma unroll
+      for (int v = 0; v < v_cnt; v++) {
+      #pragma unroll
       for (int j = 0; j < scalar; j++) {
         #pragma unroll
         for (int i = 0; i < loop_cnt; i++) {
-          dst_ptr[i  + j * loop_cnt] = bit_cast<ushort>(static_cast<_Float16>((int32_t)(static_cast<SrcType>(
-            (src_ptr[i] >> (src_bits * j)) & 0xf))));
+          dst_ptr[v * loop_cnt * scalar + j * loop_cnt + i] = bit_cast<ushort>(static_cast<_Float16>((int32_t)(static_cast<SrcType>(
+            (src_ptr[v * loop_cnt + i] >> (src_bits * j)) & 0xf))));
         }
       }
+    }
+
+    // if(cutlass::thread(0, 0)) {
+    //   PRINT_S(out);
+    //   for (int i = 0; i < size(out); i++) {
+    //     PRINT_S((float)(out[i]));
+    //   }
+    // }
 #elif ALGORITHM == 1
       auto dst_ptr = out.data();
       auto dst_int = reinterpret_cast<uint*>(dst_ptr);
@@ -404,8 +424,8 @@ public:
         // 4 different scale/zero values per thread, no exchange needed
 
         if (thread0()) {
-          PRINT_S(tCrZ_input);
-          PRINT_S(tCrS_input);
+          // PRINT_S(tCrZ_input);
+          // PRINT_S(tCrS_input);
 
         }
         CUTLASS_PRAGMA_UNROLL
