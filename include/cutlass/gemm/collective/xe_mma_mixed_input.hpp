@@ -307,13 +307,48 @@ public:
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
 
-    if constexpr (sizeof_bits_v<SrcType> < 8) {
-      // TODO (Codeplay): Current NumericArrayConverter doesn't work for int4 on intel Xe, just workaround and
+    #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
+
+   if constexpr (sizeof_bits_v<SrcType> < 8) {
+      // TODO: Current NumericArrayConverter doesn't work for int4 on intel Xe, just workaround and
       // hardcode here for functionality test, will remove this branch in the future.
-      #pragma unroll
-      for (int i = 0; i < decltype(size(tCrA_mma))::value; i++) {
-        tCrA_mma[i] = static_cast<DstType>(tCrA_load[i].get());
+
+      auto &&in = tCrA_load;
+      auto &&out = tCrA_mma;
+
+#if 0
+      // TODO: hard code for test
+     #pragma unroll
+      for (int i = 0; i < decltype(size(out))::value; i++) {
+        out[i] = static_cast<DstType>(static_cast<int16_t>(in[i]));
       }
+
+#else
+
+      using format_type = uint;
+      static constexpr auto src_bits = sizeof_bits_v<SrcType>;
+      static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
+      auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
+      auto dst_ptr = out.data();
+
+      #pragma unroll
+      for (int i = 0; i < (decltype(size(out))::value / scalar); i++) {
+        #pragma unroll
+        for (int j = 0; j < scalar; j++) {
+          dst_ptr[i * scalar + j] = static_cast<DstType>((short)(static_cast<SrcType>(
+            (src_ptr[i] >> (src_bits * j)) & 0xf)));
+          // if (thread0() && i == 1) {
+          //   PRINT_S(i);
+          //   PRINT_S(src_ptr[i]);
+          //   PRINT_S((int)(src_ptr[i * scalar + j].get()));
+          //   PRINT_S((int)dst_ptr[i * scalar + j]);
+          //   print("\n\n");
+          // }
+        }
+      }
+      #endif
+
+      return out;
     } else {
       auto const& src = tCrA_load(_, _, _);
       auto const& dst = tCrA_mma(_, _, _);
