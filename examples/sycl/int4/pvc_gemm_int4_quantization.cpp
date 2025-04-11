@@ -76,7 +76,7 @@ enum GemmMode {
   ConvertAndScaleWithZeroPoint
 };
 
-using MmaType = bfloat16_t;
+using MmaType = half_t;
 using QuantType = _BitInt(4);
 
 // Command line options parsing
@@ -250,7 +250,7 @@ struct ExampleRunner {
     using TileShape = Shape<_256, _256, _32>;
 
     using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
+        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
                                       Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
     constexpr int PipelineStages = 3;
@@ -532,7 +532,7 @@ int main(int argc, const char** argv)
   using TileShape = Shape<_256, _256, _16>;
 
   using TiledMma =
-      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32BF16BF16F32_TT>, Layout<TileShape>,
+      typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
                                     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 3;
