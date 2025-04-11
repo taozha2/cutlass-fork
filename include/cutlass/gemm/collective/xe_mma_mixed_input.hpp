@@ -325,33 +325,40 @@ public:
       for (int i = 0; i < decltype(size(out))::value; i++) {
         out[i] = static_cast<DstType>(static_cast<int16_t>(in[i]));
       }
-
 #else
-
-      using format_type = uint;
+      using format_type = short;
       static constexpr auto src_bits = sizeof_bits_v<SrcType>;
       static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
       auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
-      auto dst_ptr = out.data();
+      static constexpr auto loop_cnt = decltype(size(out))::value / scalar;
+      using namespace cutlass::platform;
 
+#define ALGORITHM 0
+
+#if ALGORITHM == 0
+      auto&& dst_ptr = *(intel::ushort64*)(out.data());
       #pragma unroll
-      for (int i = 0; i < (decltype(size(out))::value / scalar); i++) {
+      for (int j = 0; j < scalar; j++) {
         #pragma unroll
-        for (int j = 0; j < scalar; j++) {
-          dst_ptr[i * scalar + j] = static_cast<DstType>((short)(static_cast<SrcType>(
-            (src_ptr[i] >> (src_bits * j)) & 0xf)));
-          // if (thread0() && i == 1) {
-          //   PRINT_S(i);
-          //   PRINT_S(src_ptr[i]);
-          //   PRINT_S((int)(src_ptr[i * scalar + j].get()));
-          //   PRINT_S((int)dst_ptr[i * scalar + j]);
-          //   print("\n\n");
-          // }
+        for (int i = 0; i < loop_cnt; i++) {
+          dst_ptr[i  + j * loop_cnt] = bit_cast<ushort>(static_cast<_Float16>((int32_t)(static_cast<SrcType>(
+            (src_ptr[i] >> (src_bits * j)) & 0xf))));
         }
       }
-      #endif
-
-      // return out;
+#elif ALGORITHM == 1
+      auto dst_ptr = out.data();
+      auto dst_int = reinterpret_cast<uint*>(dst_ptr);
+      #pragma unroll
+      for (int j = 0; j < scalar; j++) {
+        #pragma unroll
+        for (int i = 0; i < (loop_cnt / 2); i++) {
+          auto first_half = bit_cast<ushort>(static_cast<_Float16>((short)(static_cast<SrcType>((src_ptr[2*i] >> (src_bits * j)) & 0xf))));
+          auto second_half = bit_cast<ushort>(static_cast<_Float16>((short)(static_cast<SrcType>((src_ptr[2*i +1] >> (src_bits * j)) & 0xf))));
+          dst_int[i + j * loop_cnt / 2] = first_half | (second_half << 16);
+        }
+      }
+#endif
+#endif
     } else {
       auto const& src = tCrA_load(_, _, _);
       auto const& dst = tCrA_mma(_, _, _);
@@ -572,17 +579,18 @@ public:
       if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
         copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
       }
+
+      if(prefetch_k < k_tile_count) {
+        prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
+        prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
+      }
+
       if constexpr (IsATransformed) {
         transform_quant(quant_frag, mma_A, fragment_scale_input,
                         fragment_zero_input);
       } else {
         transform_quant(quant_frag, mma_B, fragment_scale_input,
                         fragment_zero_input);
-      }
-
-      if(prefetch_k < k_tile_count) {
-        prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
-        prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
       }
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
