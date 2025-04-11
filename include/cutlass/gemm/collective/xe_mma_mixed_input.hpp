@@ -378,6 +378,7 @@ public:
       }
     }
 
+    static_assert(!IsATransformed);
     if constexpr (ModeHasScales) {
       if constexpr(IsATransformed){
         // The current scale load atom (1x32) gives 2 scale values to
@@ -398,13 +399,13 @@ public:
           }
         }
       } else {
-        // 16 x 4 x 2 values for B
-        // 16 x 2 of these are same K
+        // 16 x 4 x 1 values for B
+        // 16 x 1 of these are same K
         // 4 different scale/zero values per thread, no exchange needed
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < 4; ++i) {
           CUTLASS_PRAGMA_UNROLL
-          for (int j = 0; j < 32; ++j) {
+          for (int j = 0; j < 16; ++j) {
             tCrA_mma(_, i, _)[j] *= tCrS_input(i);
             if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
               tCrA_mma(_, i, _)[j] += tCrZ_input(i);
