@@ -232,7 +232,7 @@ struct CollectiveMma<
       for (int j = 0; j < scalar; j++) {
         #pragma unroll
         for (int i = 0; i < loop_cnt; i++) {
-          dst_ptr[i  + j * loop_cnt] = bit_cast<ushort>(static_cast<DstType>((short)(static_cast<SrcType>(
+          dst_ptr[i  + j * loop_cnt] = bit_cast<ushort>(static_cast<_Float16>((int32_t)(static_cast<SrcType>(
             (src_ptr[i] >> (src_bits * j)) & 0xf))));
         }
       }
