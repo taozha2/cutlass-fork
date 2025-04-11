@@ -126,7 +126,7 @@ public:
 
   using GmemTiledCopyA = GmemTiledCopyA_;
   using GmemTiledCopyB = GmemTiledCopyB_;
-  using GmemTiledCopyScale = XE_2D_U16x1x32_LD_N;  // TODO(Codeplay): generalize
+  using GmemTiledCopyScale = XE_2D_U16x1x32_LD_NN;  // TODO(Codeplay): generalize
 
   using SmemLayoutAtomA = SmemLayoutAtomA_;
   using SmemLayoutAtomB = SmemLayoutAtomB_;
@@ -405,6 +405,12 @@ public:
         // 16 x 4 x 1 values for B
         // 16 x 1 of these are same K
         // 4 different scale/zero values per thread, no exchange needed
+
+        if (thread0()) {
+          PRINT_S(tCrZ_input);
+          PRINT_S(tCrS_input);
+
+        }
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < 4; ++i) {
           CUTLASS_PRAGMA_UNROLL
