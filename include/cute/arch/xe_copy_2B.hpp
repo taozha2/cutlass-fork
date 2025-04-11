@@ -440,6 +440,25 @@ struct XE_2D_U16x1x32_LD_N {
   };
 };
 
+struct XE_2D_U16x1x32_LD_NN {
+  using BlockShape = Shape<_1, _32>;
+  using inst_dtype = uint32_t;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(SYCL_INTEL_TARGET)
+    // static_assert(sizeof(T) == 2, "Expected T to have size 2");
+    *reinterpret_cast<intel::uint *>(dst) =
+    __builtin_IB_subgroup_block_read_flat_u32_m1k16v1(
+            (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+#endif
+  }
+};
+
 struct XE_2D_U16x2x32_LD_N {
   using BlockShape = Shape<_2, _32>;
 
