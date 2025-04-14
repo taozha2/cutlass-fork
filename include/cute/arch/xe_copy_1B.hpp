@@ -73,7 +73,7 @@ SYCL_DEVICE_BUILTIN(
         intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
-    cute::intel::ushort16 __builtin_IB_subgroup_block_read_flat_u8_m16k16v2(
+    cute::intel::uchar32 __builtin_IB_subgroup_block_read_flat_u8_m16k16v2(
         intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
 
@@ -125,7 +125,11 @@ SYCL_DEVICE_BUILTIN(
     cute::intel::uint32 __builtin_IB_subgroup_block_read_flat_transform_u8_k32v4(
         intptr_t baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, cute::intel::coord_t coord));
-
+SYCL_DEVICE_BUILTIN(
+          cute::intel::uint8 __builtin_IB_subgroup_block_read_flat_transform_u8_k16v2(
+              intptr_t baseoffset, int width_minus_one, int height_minus_one,
+              int pitch_minus_one, cute::intel::coord_t coord));
+      
 // 8bits No transform No transpose
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_write_flat_u8_m1k16v1(
     intptr_t baseoffset, int width_minus_one, int height_minus_one,
@@ -579,8 +583,8 @@ struct XE_2D_U4x16x64_LD_NN {
                                     T *dst) {
 #if defined(SYCL_INTEL_TARGET)
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
-    *reinterpret_cast<intel::ushort16 *>(dst) =
-        __builtin_IB_subgroup_block_read_flat_u8_m16k16v2(
+    *reinterpret_cast<intel::uchar32 *>(dst) =
+    __builtin_IB_subgroup_block_read_flat_u8_m16k16v2(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");

@@ -427,8 +427,12 @@ public:
         // 4 different scale/zero values per thread, no exchange needed
 
         if (thread0()) {
-          // PRINT_S(tCrZ_input);
-          // PRINT_S(tCrS_input);
+          PRINT_S(tCrZ_input);
+          PRINT_S(tCrS_input);
+
+          for (int i =0; i < 4; i++) {
+            PRINT_S((float)(tCrS_input[i]));
+          }
 
         }
         CUTLASS_PRAGMA_UNROLL
@@ -553,7 +557,7 @@ public:
 
   #define LOG_GROUP 0
   #define LOG_THREAD 0
-  #define CUTLASS_ENABLE_DEBUG_PRINTS 0
+  #define CUTLASS_ENABLE_DEBUG_PRINTS 1
   #if CUTLASS_ENABLE_DEBUG_PRINTS
   #define PRINT(x) print(#x ": "); print(x); print("\n");
     if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
