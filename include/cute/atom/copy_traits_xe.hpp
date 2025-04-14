@@ -587,11 +587,11 @@ struct Copy_Traits_<XE_2D_U4x16x64_LD_NN, args_t...>
     : XE_2D_LD_Unpack<XE_2D_U4x16x64_LD_NN, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
-  using SrcLayout = Layout<Shape <_16,Shape <_4, _4, _16>>,
-                           Stride<_0,Stride <_1, _4, _16>>>;
+  using SrcLayout = Layout<Shape <_16,Shape <_4, _2, _16, _2>>,
+                           Stride<_0,Stride <_1, _128, _8, _4>>>;
   // Map from (dst-thr,dst-val) to bit
-  using DstLayout = Layout<Shape <_16,Shape <_4, _4, _16>>,
-                           Stride<_16,Stride<_1, _4, _16>>>;
+  using DstLayout = Layout<Shape <_16,Shape <_4, _2, _16, _2>>,
+                           Stride<_16,Stride <_1, _128, _8, _4>>>;
   // Reference map from (thr,val) to bit
   using RefLayout = DstLayout;
 

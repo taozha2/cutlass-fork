@@ -101,15 +101,18 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
     block_device.copy_from_host(block_host.data());
     block_device_dq.copy_from_host(block_host_dq.data());
   } else {
-    static constexpr auto array_size = 1024;
+    static constexpr auto array_size = 32 * 4096;
 
     cute::array_subbyte<T1, array_size> block_host{};
     auto block_host_dq = std::vector<T2>(array_size);
 
-    for (int i = 0; i < block_host.size(); ++i) {
-      block_host[i] = static_cast<T1>(i % 2);
-      block_host_dq[i] = static_cast<T2>((short)(block_host[i].get()));
+    for (int i = 0; i < 32; ++i) {
+      for (int j = 0; j < 4096; ++j) {
+
+      block_host[i * 4096 + j ] = static_cast<T1>((j +1) % 7);
+      block_host_dq[i * 4096 + j ] = static_cast<T2>((short)(block_host[i * 4096 + j ].get()));
     }
+  }
 
     static constexpr auto elements_per_byte = cute::sizeof_bits_v<int8_t> / cute::sizeof_bits_v<T1>;
 
