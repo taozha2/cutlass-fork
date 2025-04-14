@@ -34,6 +34,8 @@
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/reference/device/sycl_tensor_fill.h"
 
+#define INT4_DEBUG 0
+
 /// Helper to initialize a block of device data
 template <class Element>
 bool initialize_block(Element* block, std::size_t size, uint64_t seed=2023) {
@@ -108,8 +110,11 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
 
     for (int i = 0; i < 32; ++i) {
       for (int j = 0; j < 4096; ++j) {
-
+#if INT4_DEBUG
       block_host[i * 4096 + j ] = static_cast<T1>((j +1) % 7);
+#else
+      block_host[i * 4096 + j ] = static_cast<T1>(dist(rng));
+#endif
       block_host_dq[i * 4096 + j ] = static_cast<T2>((short)(block_host[i * 4096 + j ].get()));
     }
   }

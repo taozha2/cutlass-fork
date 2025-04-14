@@ -310,6 +310,9 @@ public:
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
 
+    static_assert(std::is_same_v<half_t, typename EngineScales::value_type>
+       && std::is_same_v<half_t, typename EngineZeros::value_type>);
+
     #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
 
    if constexpr (sizeof_bits_v<SrcType> < 8) {
@@ -360,9 +363,9 @@ public:
     }
 
     // if(cutlass::thread(0, 0)) {
-    //   PRINT_S(out);
-    //   for (int i = 0; i < size(out); i++) {
-    //     PRINT_S((float)(out[i]));
+    //   PRINT_S(tCrA_mma);
+    //   for (int i = 0; i < size(tCrA_mma); i++) {
+    //     PRINT_S((float)(tCrA_mma[i]));
     //   }
     // }
 #elif ALGORITHM == 1
@@ -426,15 +429,19 @@ public:
         // 16 x 1 of these are same K
         // 4 different scale/zero values per thread, no exchange needed
 
-        if (thread0()) {
-          PRINT_S(tCrZ_input);
-          PRINT_S(tCrS_input);
+        // if (thread0()) {
+        //   PRINT_S(tCrZ_input);
+        //   PRINT_S(tCrS_input);
 
-          for (int i =0; i < 4; i++) {
-            PRINT_S((float)(tCrS_input[i]));
-          }
+          // for (int i =0; i < 4; i++) {
+          //   PRINT_S((float)(tCrS_input[i]));
+          // }
 
-        }
+          // for (int i =0; i < 4; i++) {
+          //   PRINT_S((float)(tCrZ_input[i]));
+          // }
+        // }
+
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < 4; ++i) {
           CUTLASS_PRAGMA_UNROLL
@@ -557,7 +564,7 @@ public:
 
   #define LOG_GROUP 0
   #define LOG_THREAD 0
-  #define CUTLASS_ENABLE_DEBUG_PRINTS 1
+  #define CUTLASS_ENABLE_DEBUG_PRINTS 0
   #if CUTLASS_ENABLE_DEBUG_PRINTS
   #define PRINT(x) print(#x ": "); print(x); print("\n");
     if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
@@ -623,6 +630,13 @@ public:
         transform_quant(quant_frag, mma_B, fragment_scale_input,
                         fragment_zero_input);
       }
+
+      // if(cutlass::thread(0, 0) && k_tile == 0) {
+      //   PRINT_S(mma_B);
+      //   for(int i =0; i < mma_B.size(); i++) {
+      //     PRINT_S((float)(mma_B[i]));
+      //   }
+      //  }
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
     }

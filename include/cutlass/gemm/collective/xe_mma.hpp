@@ -236,7 +236,14 @@ struct CollectiveMma<MainloopIntelPVC<Stages, Schedule>, TileShape_, ElementA_, 
         prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
       }
+      #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
 
+      //  if(cutlass::thread(0, 0) && k_tile == 0) {
+      //   PRINT_S(tCrB);
+      //   for(int i =0; i < tCrB.size(); i++) {
+      //     PRINT_S((float)(tCrB[i]));
+      //   }
+      //  }
       cute::gemm(tiled_mma, tCrA, tCrB, accum);
       barrier_wait(barrier_scope);
     }
