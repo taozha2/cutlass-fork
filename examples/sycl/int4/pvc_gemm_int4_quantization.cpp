@@ -330,26 +330,25 @@ struct ExampleRunner {
       block.copy_from_host(stage.data());
     } 
     else {
-      // initialize_subbyte_block(block, seed + 2025);
-
+#if INT4_DEBUG
       std::vector<Element> stage(block.size(), Element(1.0f));
-
       for (int i =0; i < 1; i++) {
         for (int j =0; j < 4096; j++) {
           stage[i * 4096 +j] = (Element)((j +2) % 7);
+        }
       }
-    }
       block.copy_from_host(stage.data());
+#else
+      float elt_max_f = float(7/*cutlass::platform::numeric_limits<ElementQuant>::max()*/);
+      const float max_dequant_val = 4.f;
+      const float min_dequant_val = 0.5f;
 
-      // float elt_max_f = float(7/*cutlass::platform::numeric_limits<ElementQuant>::max()*/);
-      // const float max_dequant_val = 4.f;
-      // const float min_dequant_val = 0.5f;
+      float scope_max(max_dequant_val / elt_max_f);
+      float scope_min(min_dequant_val / elt_max_f);
 
-      // float scope_max(max_dequant_val / elt_max_f);
-      // float scope_min(min_dequant_val / elt_max_f);
-
-      // cutlass::reference::device::BlockFillRandomUniform(
-      //   block.get(), block.size(), seed, Element(scope_max), Element(scope_min));
+      cutlass::reference::device::BlockFillRandomUniform(
+        block.get(), block.size(), seed, Element(scope_max), Element(scope_min));
+#endif
     }
     return true;
   }
