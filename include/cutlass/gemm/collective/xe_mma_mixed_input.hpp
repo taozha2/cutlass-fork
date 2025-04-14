@@ -312,20 +312,15 @@ public:
 
     #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
 
+    auto &&in = tCrA_load;
+    auto &&out = tCrA_mma;
+
+#define ALGORITHM 0
+
    if constexpr (sizeof_bits_v<SrcType> < 8) {
       // TODO: Current NumericArrayConverter doesn't work for int4 on intel Xe, just workaround and
       // hardcode here for functionality test, will remove this branch in the future.
 
-      auto &&in = tCrA_load;
-      auto &&out = tCrA_mma;
-
-#if 0
-      // TODO: hard code for test
-     #pragma unroll
-      for (int i = 0; i < decltype(size(out))::value; i++) {
-        out[i] = static_cast<DstType>(static_cast<int16_t>(in[i]));
-      }
-#else
       using format_type = int8_t;
       static constexpr auto src_bits = sizeof_bits_v<SrcType>;
       static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
@@ -336,35 +331,34 @@ public:
       using namespace cutlass::platform;
 
       static_assert(loop_cnt == 16);
-#define ALGORITHM 0
 
-// if(cutlass::thread(0, 0)) {
-//   PRINT_S(in);
-//   for (int i = 0; i < size(in); i++) {
-//     PRINT_S((short)(in[i].get()));
-//   }
-// }
+      // if(cutlass::thread(0, 0)) {
+      //   PRINT_S(in);
+      //   for (int i = 0; i < size(in); i++) {
+      //     PRINT_S((short)(in[i].get()));
+      //   }
+      // }
 
 #if ALGORITHM == 0
       auto&& dst_ptr = *(intel::ushort64*)(out.data());
       #pragma unroll
       for (int v = 0; v < v_cnt; v++) {
-      #pragma unroll
-      for (int j = 0; j < scalar; j++) {
         #pragma unroll
-        for (int i = 0; i < loop_cnt; i++) {
-          dst_ptr[v * loop_cnt * scalar + j * loop_cnt + i] = bit_cast<ushort>(static_cast<_Float16>((int32_t)(static_cast<SrcType>(
-            (src_ptr[v * loop_cnt + i] >> (src_bits * j)) & 0xf))));
+        for (int j = 0; j < scalar; j++) {
+          #pragma unroll
+          for (int i = 0; i < loop_cnt; i++) {
+            dst_ptr[v * loop_cnt * scalar + j * loop_cnt + i] = bit_cast<ushort>(static_cast<_Float16>((int32_t)(static_cast<SrcType>(
+              (src_ptr[v * loop_cnt + i] >> (src_bits * j)) & 0xf))));
+          }
         }
       }
-    }
 
-    // if(cutlass::thread(0, 0)) {
-    //   PRINT_S(tCrA_mma);
-    //   for (int i = 0; i < size(tCrA_mma); i++) {
-    //     PRINT_S((float)(tCrA_mma[i]));
-    //   }
-    // }
+      // if(cutlass::thread(0, 0)) {
+      //   PRINT_S(tCrA_mma);
+      //   for (int i = 0; i < size(tCrA_mma); i++) {
+      //     PRINT_S((float)(tCrA_mma[i]));
+      //   }
+      // }
 #elif ALGORITHM == 1
       auto dst_ptr = out.data();
       auto dst_int = reinterpret_cast<uint*>(dst_ptr);
@@ -377,7 +371,6 @@ public:
           dst_int[i + j * loop_cnt / 2] = first_half | (second_half << 16);
         }
       }
-#endif
 #endif
     } else {
       auto const& src = tCrA_load(_, _, _);
@@ -443,7 +436,11 @@ public:
         for (int i = 0; i < 4; ++i) {
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < 16; ++j) {
+#if ALGORITHM == 2
+            tCrA_mma(_, i, _)[j] = in(_, i, _)[j] * tCrS_input(i);
+#else
             tCrA_mma(_, i, _)[j] *= tCrS_input(i);
+#endif
             if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
               tCrA_mma(_, i, _)[j] += tCrZ_input(i);
             }
