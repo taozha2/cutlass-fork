@@ -337,7 +337,7 @@ public:
       // }
 
 #if ALGORITHM == 0
-      auto&& dst_ptr = *(intel::ushort64*)(out.data());
+      auto&& dst_ptr = *(intel::ushort32*)(out.data());
       #pragma unroll
       for (int v = 0; v < v_cnt; v++) {
         #pragma unroll
@@ -416,23 +416,28 @@ public:
         // 16 x 1 of these are same K
         // 4 different scale/zero values per thread, no exchange needed
 
-        // if (thread0()) {
-        //   PRINT_S(tCrZ_input);
-        //   PRINT_S(tCrS_input);
+#if 1
+        if (thread0()) {
+          PRINT_S(tCrZ_input);
+          PRINT_S(tCrS_input);
+        }
+#endif
+        //   for (int i =0; i < tCrS_input.size(); i++) {
+        //     PRINT_S((float)(tCrS_input[i]));
+        //   }
 
-          // for (int i =0; i < 4; i++) {
-          //   PRINT_S((float)(tCrS_input[i]));
-          // }
-
-          // for (int i =0; i < 4; i++) {
-          //   PRINT_S((float)(tCrZ_input[i]));
-          // }
+        //   for (int i =0; i < tCrZ_input.size(); i++) {
+        //     PRINT_S((float)(tCrZ_input[i]));
+        //   }
         // }
 
+        static constexpr auto DPAS = decltype(size<0>(in))::value;
+        static constexpr auto N = decltype(size<1>(in))::value;
+
         CUTLASS_PRAGMA_UNROLL
-        for (int i = 0; i < 4; ++i) {
+        for (int i = 0; i < N; ++i) {
           CUTLASS_PRAGMA_UNROLL
-          for (int j = 0; j < 16; ++j) {
+          for (int j = 0; j < DPAS; ++j) {
 #if ALGORITHM == 2
             tCrA_mma(_, i, _)[j] = in(_, i, _)[j] * tCrS_input(i);
 #else
@@ -494,7 +499,7 @@ public:
     // layout else we need mode N_iter from fragment_B layout.
     using FragScaleLayout = std::conditional_t<IsATransformed,
                                                Layout<Shape<_2, _1, _1>>,
-                                               Layout<Shape<_2, _2, _1>>>;
+                                               Layout<Shape<_2, _1, _1>>>;
     Tensor fragment_scale_input = make_tensor<NonVoidElementScale>(FragScaleLayout{});
     Tensor fragment_zero_input =  make_tensor<NonVoidElementZero> (FragScaleLayout{});
 
@@ -548,7 +553,7 @@ public:
                                        make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
       }else{
         return make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
-                           make_layout(make_shape(_2{}, _2{}, _1{}, k_tile_count), 
+                           make_layout(make_shape(_2{}, _1{}, _1{}, k_tile_count), 
                                        make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
       }
     }();
