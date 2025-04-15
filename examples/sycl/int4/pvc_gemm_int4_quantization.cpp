@@ -76,7 +76,7 @@ enum GemmMode {
   ConvertAndScaleWithZeroPoint
 };
 
-using MmaType = half_t;
+using MmaType = _Float16;
 using QuantType = _BitInt(4);
 
 // Command line options parsing
@@ -416,7 +416,7 @@ struct ExampleRunner {
                         block_scale.get(), block_zero.get(), layout_scale_zero,
                         options.g);
     } else {
-      dequantize(block_B_dq.get(), block_B.get(), layout_B,
+      cutlass::dequantize(block_B_dq.get(), block_B.get(), layout_B,
                         block_scale.get(), block_zero.get(), layout_scale_zero,
                         options.g);
     }

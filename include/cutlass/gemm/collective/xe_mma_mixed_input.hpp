@@ -307,9 +307,6 @@ public:
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
 
-    static_assert(std::is_same_v<half_t, typename EngineScales::value_type>
-       && std::is_same_v<half_t, typename EngineZeros::value_type>);
-
     #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
 
     auto &&in = tCrA_load;

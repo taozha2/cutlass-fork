@@ -106,8 +106,8 @@ template <>
 struct MMA_Traits<XE_8x16x16_F32F16F16F32_TT>
 {
   using ValTypeD = float;
-  using ValTypeA = half_t;
-  using ValTypeB = half_t;
+  using ValTypeA = _Float16;
+  using ValTypeB = _Float16;
   using ValTypeC = float;
 
   using Shape_MNK = Shape<_8,_16,_16>;
