@@ -227,13 +227,13 @@ struct CollectiveMma<
 #define ALGORITHM 0
 
 #if ALGORITHM == 0
-      auto&& dst_ptr = *(intel::ushort64*)(out.data());
+      auto&& dst_ptr = *(intel::half64*)(out.data());
       #pragma unroll
       for (int j = 0; j < scalar; j++) {
         #pragma unroll
         for (int i = 0; i < loop_cnt; i++) {
-          dst_ptr[i  + j * loop_cnt] = bit_cast<ushort>(static_cast<_Float16>((int32_t)(static_cast<SrcType>(
-            (src_ptr[i] >> (src_bits * j)) & 0xf))));
+          dst_ptr[i  + j * loop_cnt] = static_cast<_Float16>((int32_t)(static_cast<SrcType>(
+            (src_ptr[i] >> (src_bits * j)) & 0xf)));
         }
       }
 #elif ALGORITHM == 1

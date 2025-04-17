@@ -76,6 +76,8 @@ using ushort16 = vector_t<ushort, 16>;
 using ushort32 = vector_t<ushort, 32>;
 using ushort64 = vector_t<ushort, 64>;
 
+using half64 = vector_t<_Float16, 64>;
+
 using ulong2 = vector_t<ulong, 2>;
 using ulong4 = vector_t<ulong, 4>;
 
