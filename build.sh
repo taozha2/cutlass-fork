@@ -1,9 +1,6 @@
 script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 rm -rf ${script_dir}/.git/hooks/pre-commit
-rm -rf ${script_dir}/build && mkdir ${script_dir}/build && cd ${script_dir}/build
-
-clear
-
+rm -rf ${script_dir}/build/*
 
 # ================= unset envs =================
 unset do_validation
@@ -25,64 +22,33 @@ unset IGC_VISAOptions
 
 
 # ================= compiler / driver =================
-# https://github.com/intel/llvm/releases/tag/nightly-2024-05-16
-# https://ubit-gfx.intel.com/build/19168301/artifacts
-sycl_compiler_path=/opt/cutlass/compiler/20250304/
-gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-29010/extract/
+# https://github.com/intel/llvm/releases
+# https://ubit-gfx.intel.com/build/21433.latest_successful
+sycl_compiler_path=/opt/cutlass/compiler/20250415/
+gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-29102/extract/
 export CPATH=$sycl_compiler_path:$sycl_compiler_path/include/:$sycl_compiler_path/include/sycl/
 export LIBRARY_PATH=$gpu_driver_path/usr/lib/x86_64-linux-gnu/:$sycl_compiler_path/lib/
 export LD_LIBRARY_PATH=$LIBRARY_PATH
 export clang_path=${sycl_compiler_path}/bin/clang++
 
 
-# ================= JIT / AOT =================
 output=intel_gpu_pvc
-#output=spir64
-
 
 # ================= IGC options =================
 export IGC_VISAPreSchedCtrl=6
 export IGC_EnableVISANoSchedule=0
 export IGC_ShaderDumpEnable=1
 export IGC_DumpToCustomDir=${script_dir}/build/mm_dumps
-#export IGC_VISAOptions="-newspillcost "
-#export IGC_DisableLoopUnroll=1
-#export IGC_VectorAliasBBThreshold=1500
-#export IGC_VISAOptions="-perfmodel"
-
 
 export ZE_AFFINITY_MASK=0
 export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
 export OCL_ICD_VENDORS=$HOME
 
 
-# ================= target =================
-#target=./test/unit/cute/intel_xe/cutlass_test_unit_cute_intel_xe
 target=./examples/sycl/int4/pvc_gemm_int4_quantization
 
-cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path \
+cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path -DCMAKE_CXX_FLAGS_RELEASE=$1 \
 -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
 -DCMAKE_CXX_FLAGS=" -ftarget-register-alloc-mode=pvc:large -DSYCL_INTEL_TARGET -gline-tables-only " \
-&& ninja -v $target && $target --m=4096 --n=4096 --k=4096 --l=1 --iterations=20
+&& ninja -v $target && $target --m=4096 --n=4096 --k=32 --l=1 --iterations=0
 
-# -gline-tables-only
-
-# ================= unitrace command =================
-#unitrace -k -i 20 --chrome-kernel-logging -o cutlass_pvc_gemm.csv $target
-
-#print kernel calls
-#unitrace --device-timing --kernel-submission --device-timeline --chrome-kernel-logging --chrome-device-logging --chrome-no-thread-on-device --chrome-no-engine-on-device -i 20 $target -o cutlass.csv
-#unitrace -k --chrome-kernel-logging --chrome-device-logging --chrome-no-thread-on-device --chrome-no-engine-on-device -i 20 $target -o cutlass.csv
-
-#check stalls
-#unitrace --chrome-kernel-logging --stall-sampling -i 20 -o cutlass_pvc_gemm.csv $target
-
-#unitrace --metric-list
-#unitrace -k -g <group> -i 20 --chrome-kernel-logging $target -o
-
-perf_py=/home/zt/workspace/cutlass/unitrace/tools/unitrace/scripts/metrics/analyzeperfmetrics.py
-#csv_file=cutlass_pvc_gemm.metrics.3584319.csv
-#python3 $perf_py -l $csv_file
-#python3 $perf_py -m "XVE_STALL[%],XVE_THREADS_OCCUPANCY_ALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Occupancy, Stalls and Function Unit Utilizations" -m "AvgGpuSliceFrequencyMHz[MHz]" -y "Frequency" -m "L3_BYTE_READ[bytes],L3_BYTE_WRITE[bytes],GPU_MEMORY_BYTE_READ[bytes],GPU_MEMORY_BYTE_WRITE[bytes]" -y "L3 and Memory" -m "XVE_ACTIVE[%],XVE_STALL[%]" -y "Active and Stalls" -b "L3_BYTE_READ[bytes],L3_BYTE_WRITE[bytes],GPU_MEMORY_BYTE_READ[bytes],GPU_MEMORY_BYTE_WRITE[bytes]" -t "Hardware Metrics" ${csv_file}
-#python3 $perf_py -s $IGC_DumpToCustomDir -t "XVE Stalls by Instruction" $csv_file -o ${csv_file}.pdf
-#python3 $perf_py -k "main::{lambda(auto:1)#3}" -s $IGC_DumpToCustomDir $csv_file -o ${csv_file}.pdf

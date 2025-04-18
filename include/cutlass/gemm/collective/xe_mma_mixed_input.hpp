@@ -416,21 +416,6 @@ public:
         // 16 x 1 of these are same K
         // 4 different scale/zero values per thread, no exchange needed
 
-#if 1
-        if (thread0()) {
-          PRINT_S(tCrZ_input);
-          PRINT_S(tCrS_input);
-        }
-#endif
-        //   for (int i =0; i < tCrS_input.size(); i++) {
-        //     PRINT_S((float)(tCrS_input[i]));
-        //   }
-
-        //   for (int i =0; i < tCrZ_input.size(); i++) {
-        //     PRINT_S((float)(tCrZ_input[i]));
-        //   }
-        // }
-
         static constexpr auto DPAS = decltype(size<0>(in))::value;
         static constexpr auto N = decltype(size<1>(in))::value;
 
@@ -447,6 +432,15 @@ public:
               tCrA_mma(_, i, _)[j] += tCrZ_input(i);
             }
           }
+        }
+
+
+        if (thread0()) {
+#ifdef PASS_DEBUG
+          PRINT_S(tCrZ_input);
+          PRINT_S(tCrS_input);
+#endif
+          PRINT_S((float)(tCrA_mma[0]));
         }
       }
     }
