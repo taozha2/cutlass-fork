@@ -371,7 +371,7 @@ struct XE_2D_U8x32x32_LD_N {
   }
 };
 
-struct XE_2D_U8x8x32_LD_T {
+struct XE_2D_U8x32x8_LD_T {
   using BlockShape = Shape<_8, _32>;
   using inst_dtype = uint8_t;
   static constexpr bool is_transpose = true;
@@ -391,7 +391,7 @@ struct XE_2D_U8x8x32_LD_T {
   }
 };
 
-struct XE_2D_U8x4x32_LD_T {
+struct XE_2D_U8x32x4_LD_T {
   using BlockShape = Shape<_4, _32>;
   using inst_dtype = uint8_t;
   static constexpr bool is_transpose = true;
@@ -412,7 +412,7 @@ struct XE_2D_U8x4x32_LD_T {
 };
 
 
-struct XE_2D_U8x32x16_LD_T {
+struct XE_2D_U8x16x32_LD_T {
   using BlockShape = Shape<_32, _16>;
   using inst_dtype = uint32_t;
   static constexpr bool is_transpose = true;

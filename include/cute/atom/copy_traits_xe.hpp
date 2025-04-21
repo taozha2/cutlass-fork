@@ -1545,8 +1545,8 @@ struct Copy_Traits<XE_2D_U16x16x16_LD_T, args_t...>
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x32x16_LD_T, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_U8x32x16_LD_T, args_t...> {
+struct Copy_Traits<XE_2D_U8x16x32_LD_T, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U8x16x32_LD_T, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16,_16>,
@@ -1559,12 +1559,12 @@ struct Copy_Traits<XE_2D_U8x32x16_LD_T, args_t...>
 
   template <class... ArgT>
   Copy_Traits(ArgT... args)
-      : XE_2D_LD_Unpack<XE_2D_U8x32x16_LD_T, args_t...>(args...) {}
+      : XE_2D_LD_Unpack<XE_2D_U8x16x32_LD_T, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x8x32_LD_T, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_U8x8x32_LD_T, args_t...> {
+struct Copy_Traits<XE_2D_U8x32x8_LD_T, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U8x32x8_LD_T, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16,Shape <_8, _2, _8>>,
@@ -1577,12 +1577,12 @@ struct Copy_Traits<XE_2D_U8x8x32_LD_T, args_t...>
 
   template <class... ArgT>
   Copy_Traits(ArgT... args)
-      : XE_2D_LD_Unpack<XE_2D_U8x8x32_LD_T, args_t...>(args...) {}
+      : XE_2D_LD_Unpack<XE_2D_U8x32x8_LD_T, args_t...>(args...) {}
 };
 
 template <class... args_t>
-struct Copy_Traits<XE_2D_U8x4x32_LD_T, args_t...>
-    : XE_2D_LD_Unpack<XE_2D_U8x4x32_LD_T, args_t...> {
+struct Copy_Traits<XE_2D_U8x32x4_LD_T, args_t...>
+    : XE_2D_LD_Unpack<XE_2D_U8x32x4_LD_T, args_t...> {
   using ThrID = Layout<_16>;
   // Map from (src-thr,src-val) to bit
   using SrcLayout = Layout<Shape <_16,Shape <_8, _2, _4>>,
@@ -1595,7 +1595,7 @@ struct Copy_Traits<XE_2D_U8x4x32_LD_T, args_t...>
 
   template <class... ArgT>
   Copy_Traits(ArgT... args)
-      : XE_2D_LD_Unpack<XE_2D_U8x4x32_LD_T, args_t...>(args...) {}
+      : XE_2D_LD_Unpack<XE_2D_U8x32x4_LD_T, args_t...>(args...) {}
 };
 
 template <class... args_t>
