@@ -39,7 +39,7 @@ template <class Element>
 bool initialize_block(
         cutlass::DeviceAllocation<Element>& block,
         uint64_t seed=2023) {
-
+#if 0
   Element scope_max, scope_min;
   int bits_input = cutlass::sizeof_bits<Element>::value;
 
@@ -56,6 +56,13 @@ bool initialize_block(
 
   cutlass::reference::device::BlockFillRandomUniform(
        block.get(), block.size(), seed, scope_max, scope_min, 0);
+#else
+  auto block_host = std::vector<Element>(block.size());
+  for (int i = 0; i < block_host.size(); ++i) {
+    block_host[i] = static_cast<Element>((i+1) % 8);
+  }
+  block.copy_from_host(block_host.data());
+#endif
 
   syclcompat::wait();
   return true;

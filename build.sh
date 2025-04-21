@@ -23,8 +23,15 @@ divide_b=" -DDIV_B=1 -DR_I_CNT=1 "
 
 # https://github.com/intel/llvm/releases/tag/nightly-2024-05-16
 # https://ubit-gfx.intel.com/build/19168301/artifacts
-sycl_compiler_path=/opt/cutlass/compiler/1008/
-gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-27004/extract/
+sycl_compiler_path=/opt/cutlass/compiler/20250415/
+gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-29142/extract/
+if [ -d "$sycl_compiler_path" ] && [ -d "$gpu_driver_path" ]; then
+  echo "compiler and driver set correctly"
+else
+  echo "compiler and driver BOT set correctly !!!"
+  return 1
+fi
+
 
 # AOT compile
 output=intel_gpu_pvc

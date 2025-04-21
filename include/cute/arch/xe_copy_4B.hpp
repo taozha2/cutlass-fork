@@ -144,9 +144,14 @@ SYCL_DEVICE_BUILTIN(
         int pitch_minus_one, intel::coord_t coord));
 
 // 32bits No transform Transpose
-SYCL_DEVICE_BUILTIN(uint __builtin_IB_subgroup_block_read_flat_transpose_u32_k1(
-    long baseoffset, int width_minus_one, int height_minus_one,
-    int pitch_minus_one, intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(
+    uint __builtin_IB_subgroup_block_read_flat_transpose_u32_k1(
+        long baseoffset, int width_minus_one, int height_minus_one,
+        int pitch_minus_one, intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(
+    intel::uint4 __builtin_IB_subgroup_block_read_flat_transpose_u32_m8k8(
+        long baseoffset, int width_minus_one, int height_minus_one,
+        int pitch_minus_one, intel::coord_t coord));
 SYCL_DEVICE_BUILTIN(
     intel::uint2 __builtin_IB_subgroup_block_read_flat_transpose_u32_k2(
         long baseoffset, int width_minus_one, int height_minus_one,
@@ -159,9 +164,8 @@ SYCL_DEVICE_BUILTIN(
     intel::uint8 __builtin_IB_subgroup_block_read_flat_transpose_u32_k8(
         long baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, intel::coord_t coord));
-
 SYCL_DEVICE_BUILTIN(
-    intel::uint16 __builtin_IB_subgroup_block_read_cacheopts_transpose_u32_m32k8(
+    intel::uint16 __builtin_IB_subgroup_block_read_cacheopts_transpose_u32_m8k8(
         long baseoffset, int width_minus_one, int height_minus_one, int pitch_minus_one,
         intel::coord_t coord, int cache));
 
@@ -703,9 +707,9 @@ struct XE_2D_U32x16x8_LD_T {
   };
 };
 
-struct XE_2D_TF32x16x8_LD_T {
-  using BlockShape = Shape<_8, _16>;
-  using ValueShape = Shape<_4, _32>;
+struct XE_2D_TF32x8x8_LD_T {
+  using BlockShape = Shape<_8, _8>;
+  using ValueShape = Shape<_4, _16>;
 
     static constexpr bool is_transpose = true;
   
@@ -715,8 +719,8 @@ struct XE_2D_TF32x16x8_LD_T {
                                       T *dst) {
   #if defined(SYCL_INTEL_TARGET)
       static_assert(sizeof(T) == 4, "Expected T to have size 4");
-      *reinterpret_cast<intel::uint8 *>(dst) =
-          __builtin_IB_subgroup_block_read_flat_transpose_u32_k8(
+      *reinterpret_cast<intel::uint4 *>(dst) =
+          __builtin_IB_subgroup_block_read_flat_transpose_u32_m8k8(
               (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
   #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");

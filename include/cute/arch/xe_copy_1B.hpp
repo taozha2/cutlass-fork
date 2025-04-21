@@ -80,6 +80,14 @@ SYCL_DEVICE_BUILTIN(
     intel::ushort32 __builtin_IB_subgroup_block_read_flat_u8_m32k32v1(
         long baseoffset, int width_minus_one, int height_minus_one,
         int pitch_minus_one, intel::coord_t coord));
+SYCL_DEVICE_BUILTIN(
+    intel::ushort8  __builtin_IB_subgroup_block_read_cacheopts_transpose_u8_m32k8(
+        long base, int width_minus_one, int height_minus_one,
+        int pitch_minus_one, intel::coord_t coord, int cacheOpt = 0));
+SYCL_DEVICE_BUILTIN(
+  intel::ushort4  __builtin_IB_subgroup_block_read_cacheopts_transpose_u8_m32k4(
+      long base, int width_minus_one, int height_minus_one,
+      int pitch_minus_one, intel::coord_t coord, int cacheOpt = 0));
 
 SYCL_DEVICE_BUILTIN(
     intel::ushort2 __builtin_IB_subgroup_block_read_flat_u8_m1k32v2(
@@ -363,6 +371,47 @@ struct XE_2D_U8x32x32_LD_N {
   }
 };
 
+struct XE_2D_U8x8x32_LD_T {
+  using BlockShape = Shape<_8, _32>;
+  using inst_dtype = uint8_t;
+  static constexpr bool is_transpose = true;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(SYCL_INTEL_TARGET)
+    static_assert(sizeof(T) == 1, "Expected T to have size 2");
+    *reinterpret_cast<intel::ushort8 *>(dst) =
+    __builtin_IB_subgroup_block_read_cacheopts_transpose_u8_m32k8(
+            (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+#endif
+  }
+};
+
+struct XE_2D_U8x4x32_LD_T {
+  using BlockShape = Shape<_4, _32>;
+  using inst_dtype = uint8_t;
+  static constexpr bool is_transpose = true;
+
+  template <class T>
+  CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
+                                    int height, int pitch, intel::coord_t coord,
+                                    T *dst) {
+#if defined(SYCL_INTEL_TARGET)
+    static_assert(sizeof(T) == 1, "Expected T to have size 2");
+    *reinterpret_cast<intel::ushort4 *>(dst) =
+    __builtin_IB_subgroup_block_read_cacheopts_transpose_u8_m32k4(
+            (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+#else
+    CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+#endif
+  }
+};
+
+
 struct XE_2D_U8x32x16_LD_T {
   using BlockShape = Shape<_32, _16>;
   using inst_dtype = uint32_t;
@@ -393,10 +442,37 @@ struct XE_2D_U8x32x32_LD_T {
                                       int height, int pitch, intel::coord_t coord,
                                       T *dst) {
   #if defined(SYCL_INTEL_TARGET)
-      static_assert(sizeof(T) == 1, "Expected T to have size 2");
-      *reinterpret_cast<intel::uint16 *>(dst) =
-      __builtin_IB_subgroup_block_read_cacheopts_transpose_u32_m32k8(
-              (long)(baseoffset), width - 1, height - 1, pitch - 1, coord, 0);
+        static constexpr auto subgroup_size = 16;
+
+  intel::uint8 d0 =
+        __builtin_IB_subgroup_block_read_flat_transpose_u32_k8(
+            (long)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+  intel::uint8 d1 =
+            __builtin_IB_subgroup_block_read_flat_transpose_u32_k8(
+                (long)(baseoffset), width - 1, height - 1, pitch - 1, intel::coord_t{(int)(coord[0]), coord[1] + subgroup_size});
+
+          auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+          auto id = sg.get_local_linear_id();
+
+          static constexpr auto item_width = decltype(size<1>(BlockShape{}))::value / subgroup_size;
+
+          intel::uint8 remote_d0, remote_d1;
+          if (id < (subgroup_size / 2)) {
+            remote_d0 = select_from_group(sg, d0, id * item_width);
+            remote_d1 = select_from_group(sg, d0, id * item_width + 1);
+          } else {
+            remote_d0 = select_from_group(sg, d1, id * item_width - subgroup_size);
+            remote_d1 = select_from_group(sg, d1, id * item_width - subgroup_size + 1);
+          }
+
+          for (int i= 0; i < 32; i++) {
+            ((int8_t*)dst)[i * item_width] = ((int8_t*)(&remote_d0))[i];
+          }
+
+          for (int i= 0; i < 32; i++) {
+            ((int8_t*)dst)[i * item_width + 1] = ((int8_t*)(&remote_d1))[i];
+          }
+
   #else
       CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
   #endif

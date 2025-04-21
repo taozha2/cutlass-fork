@@ -312,6 +312,18 @@ struct CollectiveMma<
       copy(tiled_copy_a, copy_iter_a(_,_,_,k), copy_tCrA);
       copy(tiled_copy_b, copy_iter_b(_,_,_,k), copy_tCrB);
 
+#if 0
+      #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
+
+      if (cutlass::thread(0, 0) && k_tile == 0) {
+        // PRINT_S(mma_tCrA);
+
+        for (int d = 0; d < 8/*mma_tCrA.size()*/; d++) {
+          //  PRINT_S(mma_tCrA[d]);
+        }
+      }
+#endif
+
       if(prefetch_k < k_tile_count) {
         if constexpr(cute::detail::has_prefetch<GmemTiledCopyA>) {
           prefetch(tiled_copy_a, prefetch_iter_a(_,_,_,prefetch_k));
