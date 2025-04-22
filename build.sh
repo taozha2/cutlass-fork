@@ -31,6 +31,7 @@ export LIBRARY_PATH=$gpu_driver_path/usr/lib/x86_64-linux-gnu/:$sycl_compiler_pa
 export LD_LIBRARY_PATH=$LIBRARY_PATH
 export clang_path=${sycl_compiler_path}/bin/clang++
 
+#export IGC_DisableLoopUnroll=1
 
 output=intel_gpu_pvc
 

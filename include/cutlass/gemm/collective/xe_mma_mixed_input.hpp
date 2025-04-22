@@ -304,130 +304,14 @@ public:
     static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineZeros::value_type>);
     static_assert(std::is_same_v<LayoutScales, LayoutZeros>);
 
-    using SrcType = typename EngineIn::value_type;
-    using DstType = typename EngineOut::value_type;
-
-    #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
-
-    auto &&in = tCrA_load;
-    auto &&out = tCrA_mma;
-
-#define ALGORITHM 0
-
-   if constexpr (sizeof_bits_v<SrcType> < 8) {
-      // TODO: Current NumericArrayConverter doesn't work for int4 on intel Xe, just workaround and
-      // hardcode here for functionality test, will remove this branch in the future.
-
-      using format_type = int8_t;
-      static constexpr auto src_bits = sizeof_bits_v<SrcType>;
-      static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
-      auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
-      static constexpr auto loop_cnt = decltype(size<0>(out))::value;
-      static constexpr auto v_cnt = decltype(size(out))::value / scalar / loop_cnt;
-
-      using namespace cutlass::platform;
-
-      static_assert(loop_cnt == 16);
-
-      // if(cutlass::thread(0, 0)) {
-      //   PRINT_S(in);
-      //   for (int i = 0; i < size(in); i++) {
-      //     PRINT_S((short)(in[i].get()));
-      //   }
-      // }
-
-#if ALGORITHM == 0
-      auto&& dst_ptr = *(intel::ushort32*)(out.data());
-      #pragma unroll
-      for (int v = 0; v < v_cnt; v++) {
-        #pragma unroll
-        for (int j = 0; j < scalar; j++) {
-          #pragma unroll
-          for (int i = 0; i < loop_cnt; i++) {
-            dst_ptr[v * loop_cnt * scalar + j * loop_cnt + i] = bit_cast<ushort>(static_cast<_Float16>((int32_t)(static_cast<SrcType>(
-              (src_ptr[v * loop_cnt + i] >> (src_bits * j)) & 0xf))));
-          }
-        }
-      }
-
-      // if(cutlass::thread(0, 0)) {
-      //   PRINT_S(tCrA_mma);
-      //   for (int i = 0; i < size(tCrA_mma); i++) {
-      //     PRINT_S((float)(tCrA_mma[i]));
-      //   }
-      // }
-#elif ALGORITHM == 1
-      auto dst_ptr = out.data();
-      auto dst_int = reinterpret_cast<uint*>(dst_ptr);
-      #pragma unroll
-      for (int j = 0; j < scalar; j++) {
-        #pragma unroll
-        for (int i = 0; i < (loop_cnt / 2); i++) {
-          auto first_half = bit_cast<ushort>(static_cast<_Float16>((short)(static_cast<SrcType>((src_ptr[2*i] >> (src_bits * j)) & 0xf))));
-          auto second_half = bit_cast<ushort>(static_cast<_Float16>((short)(static_cast<SrcType>((src_ptr[2*i +1] >> (src_bits * j)) & 0xf))));
-          dst_int[i + j * loop_cnt / 2] = first_half | (second_half << 16);
-        }
-      }
-#endif
-    } else {
-      auto const& src = tCrA_load(_, _, _);
-      auto const& dst = tCrA_mma(_, _, _);
-      auto pSrc = const_cast<SrcType*>(raw_pointer_cast(src.data()));
-      auto pDst = const_cast<DstType*>(raw_pointer_cast(dst.data()));
-      constexpr int num_elements = decltype(size(src))::value;
-
-    // TODO(Codeplay): (perf) consider replacing `pack` with `num_elements` here - See xe_flash_attn_mma.hpp
-      constexpr int pack = decltype(select_packing<SrcType, DstType, num_elements>::value())::value;
-      using Converter = cutlass::NumericArrayConverter<DstType, SrcType, pack, cutlass::FloatRoundStyle::round_to_nearest>;
-      using SrcArray = cutlass::Array<SrcType, pack>;
-      using DstArray = cutlass::Array<DstType, pack>;
-      constexpr int iters = num_elements / pack;
-
-      CUTLASS_PRAGMA_UNROLL
-      for (int i = 0; i < iters; ++i) {
-        SrcArray const* pSrcArr = reinterpret_cast<SrcArray const*>(pSrc) + i;
-        DstArray* pDstArr = reinterpret_cast<DstArray*>(pDst) + i;
-        *pDstArr = Converter::convert(*pSrcArr);
-      }
-    }
-
-    static_assert(!IsATransformed);
-    if constexpr (ModeHasScales) {
-      if constexpr(IsATransformed){
-        // The current scale load atom (1x32) gives 2 scale values to
-        // each thread. All threads need access to all other threads
-        // scale values, and each scale value is reused twice (unrolled)
-        CUTLASS_PRAGMA_UNROLL
-        for (int i = 0; i < 16; ++i) {
-          CUTLASS_PRAGMA_UNROLL
-          for (int j = 0; j < 2; ++j) {
-            auto scale = shfl_sync(0xFFFFFFFF, tCrS_input(j), i);
-            tCrA_mma(_, _, 0)[j * 16 + i] *= scale;
-            tCrA_mma(_, _, 1)[j * 16 + i] *= scale;
-            if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-              auto zero = shfl_sync(0xFFFFFFFF, tCrZ_input(j), i);
-              tCrA_mma(_, _, 0)[j * 16 + i] += zero;
-              tCrA_mma(_, _, 1)[j * 16 + i] += zero;
-            }
-          }
-        }
-      } else {
-        // 16 x 4 x 1 values for B
-        // 16 x 1 of these are same K
-        // 4 different scale/zero values per thread, no exchange needed
-
-        static constexpr auto DPAS = decltype(size<0>(in))::value;
-        static constexpr auto N = decltype(size<1>(in))::value;
+        static constexpr auto DPAS = decltype(size<0>(tCrA_load))::value;
+        static constexpr auto N = decltype(size<1>(tCrA_load))::value;
 
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < N; ++i) {
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < DPAS; ++j) {
-#if ALGORITHM == 2
-            tCrA_mma(_, i, _)[j] = in(_, i, _)[j] * tCrS_input(i);
-#else
             tCrA_mma(_, i, _)[j] *= tCrS_input(i);
-#endif
             if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
               tCrA_mma(_, i, _)[j] += tCrZ_input(i);
             }
@@ -442,8 +326,6 @@ public:
 #endif
           PRINT_S((float)(tCrA_mma[0]));
         }
-      }
-    }
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
@@ -552,83 +434,17 @@ public:
       }
     }();
 
-  #define LOG_GROUP 0
-  #define LOG_THREAD 0
-  #define CUTLASS_ENABLE_DEBUG_PRINTS 0
-  #if CUTLASS_ENABLE_DEBUG_PRINTS
-  #define PRINT(x) print(#x ": "); print(x); print("\n");
-    if (cutlass::thread(LOG_THREAD, LOG_GROUP)) {
-        print("======================= A: \n");
-        print("  gA   : "); print(gA);   print("\n");
-        print("  tCgA : "); print(tCgA); print("\n");
-        print("  tAgA : "); print(tAgA); print("\n");
-        print("  mma_A : "); print(mma_A); print("\n");
-        print("  frag_copy_A : "); print(frag_copy_A); print("\n");
-
-        print("=====================  B :\n");
-        print("  gB : ");   print(gB);   print("\n");
-        print("  tCgB : "); print(tCgB); print("\n");
-        print("  tBgB : "); print(tBgB); print("\n");
-        print("  mma_B : "); print(mma_B); print("\n");
-        print("  frag_copy_B : "); print(frag_copy_B); print("\n");
-
-        print("=====================  Config: \n");
-        print("  threads per workgroup : "); print(MaxThreadsPerBlock);  print("\n");
-        print("  SubgroupTileShape     : "); print(SubgroupTileShape{}); print("\n");
-
-        print("  tiled_prefetch_a :    "); print(tiled_prefetch_a); print("\n");
-        print("  tiled_prefetch_b :    "); print(tiled_prefetch_b); print("\n");
-        print("  pAgA :    "); print(pAgA); print("\n");
-        print("  pBgB :    "); print(pBgB); print("\n");
-      }
-  #undef PRINT
-  #endif
-
     const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
     int prefetch_k = 0;
 
-    CUTLASS_PRAGMA_UNROLL
-    for (int i = 0; i < DispatchPolicy::Stages; i++, prefetch_k++) {
-      prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
-      prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
-    }
-
     const int k_reload_factor = mainloop.group_size / BLK_K; 
 
-    CUTLASS_PRAGMA_UNROLL
     for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
-      // Copy gmem to rmem for the first k_tile
-      copy(mainloop.tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
-      copy(mainloop.tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
+      copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
+      copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
 
-      if constexpr(ModeHasScales){
-        copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
-      }
-      if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-        copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
-      }
-
-      if(prefetch_k < k_tile_count) {
-        prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
-        prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
-      }
-
-      if constexpr (IsATransformed) {
-        transform_quant(quant_frag, mma_A, fragment_scale_input,
+      transform_quant(quant_frag, mma_B, fragment_scale_input,
                         fragment_zero_input);
-      } else {
-        transform_quant(quant_frag, mma_B, fragment_scale_input,
-                        fragment_zero_input);
-      }
-
-      // if(cutlass::thread(0, 0) && k_tile == 0) {
-      //   PRINT_S(mma_B);
-      //   for(int i =0; i < mma_B.size(); i++) {
-      //     PRINT_S((float)(mma_B[i]));
-      //   }
-      //  }
-
-      cute::gemm(tiled_mma, mma_A, mma_B, accum);
     }
   }
 };
