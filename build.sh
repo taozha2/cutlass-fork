@@ -25,13 +25,14 @@ unset IGC_VISAOptions
 # https://github.com/intel/llvm/releases
 # https://ubit-gfx.intel.com/build/21433.latest_successful
 sycl_compiler_path=/opt/cutlass/compiler/20250415/
-gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-29102/extract/
+gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-29142/extract/
 export CPATH=$sycl_compiler_path:$sycl_compiler_path/include/:$sycl_compiler_path/include/sycl/
 export LIBRARY_PATH=$gpu_driver_path/usr/lib/x86_64-linux-gnu/:$sycl_compiler_path/lib/
 export LD_LIBRARY_PATH=$LIBRARY_PATH
 export clang_path=${sycl_compiler_path}/bin/clang++
 
-#export IGC_DisableLoopUnroll=1
+export IGC_DisableLoopUnroll=1
+#export IGC_allowDecompose2DBlockFuncs=0
 
 output=intel_gpu_pvc
 

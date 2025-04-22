@@ -440,11 +440,16 @@ public:
     const int k_reload_factor = mainloop.group_size / BLK_K; 
 
     for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
+      // copy a
+      // copy b
+      // prefetch a
+      // prefetch b
       copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
       copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
 
       transform_quant(quant_frag, mma_B, fragment_scale_input,
                         fragment_zero_input);
+      // cute::gemm();
     }
   }
 };
