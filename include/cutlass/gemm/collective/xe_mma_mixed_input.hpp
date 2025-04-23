@@ -446,7 +446,7 @@ public:
 
       transform_quant(quant_frag, mma_B, fragment_scale_input,
                         fragment_zero_input);
-      // cute::gemm();
+      cute::gemm(tiled_mma, mma_A, mma_B, accum);
     }
   }
 };
