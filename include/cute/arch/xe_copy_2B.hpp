@@ -453,6 +453,19 @@ struct XE_2D_U16x1x32_LD_NN {
     *reinterpret_cast<intel::uint *>(dst) =
     __builtin_IB_subgroup_block_read_flat_u32_m1k16v1(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
+#if 0
+#define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
+
+    if (thread0()) {
+      print("XE_2D_U16x1x32_LD_NN\n");
+      PRINT_S(baseoffset);
+      PRINT_S(width);
+      PRINT_S(height);
+      PRINT_S(pitch);
+      PRINT_S(coord[0]);
+      PRINT_S(coord[1]);
+    }
+#endif
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
 #endif

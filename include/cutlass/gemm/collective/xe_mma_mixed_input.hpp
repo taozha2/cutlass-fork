@@ -304,28 +304,25 @@ public:
     static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineZeros::value_type>);
     static_assert(std::is_same_v<LayoutScales, LayoutZeros>);
 
-        static constexpr auto DPAS = decltype(size<0>(tCrA_load))::value;
-        static constexpr auto N = decltype(size<1>(tCrA_load))::value;
+    static constexpr auto DPAS = decltype(size<0>(tCrA_load))::value;
+    static constexpr auto N = decltype(size<1>(tCrA_load))::value;
 
-        CUTLASS_PRAGMA_UNROLL
-        for (int i = 0; i < N; ++i) {
-          CUTLASS_PRAGMA_UNROLL
-          for (int j = 0; j < DPAS; ++j) {
-            tCrA_mma(_, i, _)[j] *= tCrS_input(i);
-            if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-              tCrA_mma(_, i, _)[j] += tCrZ_input(i);
-            }
-          }
-        }
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < N; ++i) {
+      CUTLASS_PRAGMA_UNROLL
+      for (int j = 0; j < DPAS; ++j) {
+        tCrA_mma(_, i, _)[j] *= tCrS_input(i);
+        tCrA_mma(_, i, _)[j] += tCrZ_input(i);
+      }
+    }
 
-
-        if (thread0()) {
+    if (thread0()) {
 #ifdef PASS_DEBUG
-          PRINT_S(tCrZ_input);
-          PRINT_S(tCrS_input);
+      PRINT_S(tCrZ_input);
+      PRINT_S(tCrS_input);
 #endif
-          PRINT_S((float)(tCrA_mma[0]));
-        }
+      PRINT_S((float)(tCrA_mma[0]));
+    }
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
