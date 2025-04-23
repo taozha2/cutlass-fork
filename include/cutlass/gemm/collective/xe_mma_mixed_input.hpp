@@ -419,12 +419,6 @@ public:
         // 16 x 1 of these are same K
         // 4 different scale/zero values per thread, no exchange needed
 
-#if 1
-        if (thread0()) {
-          PRINT_S(tCrZ_input);
-          PRINT_S(tCrS_input);
-        }
-#endif
         //   for (int i =0; i < tCrS_input.size(); i++) {
         //     PRINT_S((float)(tCrS_input[i]));
         //   }
@@ -451,6 +445,13 @@ public:
             }
           }
         }
+
+#if 0
+        if (thread0()) {
+          PRINT_S((float)(tCrA_mma[0]));
+        }
+#endif
+
       }
     }
   }
@@ -615,6 +616,14 @@ public:
       }
       if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
         copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
+      }
+
+      #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
+
+      if (thread0() && k_tile == 0) {
+        for (int s =0; s < fragment_scale_input.size(); s++) {
+          PRINT_S((float)(fragment_scale_input[s]));
+        }
       }
 
       if(prefetch_k < k_tile_count) {

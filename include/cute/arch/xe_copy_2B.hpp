@@ -84,6 +84,10 @@ SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v2(
     int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
 
 // 16 bits No transform No transpose
+SYCL_DEVICE_BUILTIN(cute::intel::ushort2 __builtin_IB_subgroup_block_read_flat_u16_m1k32v1(
+  intptr_t baseoffset, int width_minus_one, int height_minus_one,
+  int pitch_minus_one, cute::intel::coord_t coord));
+
 SYCL_DEVICE_BUILTIN(cute::intel::ushort __builtin_IB_subgroup_block_read_flat_u16_m1k16v1(
     intptr_t baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord));
@@ -442,7 +446,7 @@ struct XE_2D_U16x1x32_LD_N {
 
 struct XE_2D_U16x1x32_LD_NN {
   using BlockShape = Shape<_1, _32>;
-  using inst_dtype = uint32_t;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -450,8 +454,8 @@ struct XE_2D_U16x1x32_LD_NN {
                                     T *dst) {
 #if defined(SYCL_INTEL_TARGET)
     // static_assert(sizeof(T) == 2, "Expected T to have size 2");
-    *reinterpret_cast<intel::uint *>(dst) =
-    __builtin_IB_subgroup_block_read_flat_u32_m1k16v1(
+    *reinterpret_cast<intel::ushort2 *>(dst) =
+        __builtin_IB_subgroup_block_read_flat_u16_m1k32v1(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");

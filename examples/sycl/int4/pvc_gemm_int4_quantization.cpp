@@ -334,7 +334,7 @@ struct ExampleRunner {
       std::vector<Element> stage(block.size(), Element(1.0f));
       for (int i =0; i < 1; i++) {
         for (int j =0; j < 4096; j++) {
-          stage[i * 4096 +j] = (Element)((j +2) % 7);
+          stage[i * 4096 +j] = (Element)((j + 2) % 7);
         }
       }
       block.copy_from_host(stage.data());

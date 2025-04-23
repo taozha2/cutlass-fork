@@ -34,7 +34,7 @@
 #include "cutlass/util/device_memory.h"
 #include "cutlass/util/reference/device/sycl_tensor_fill.h"
 
-#define INT4_DEBUG 0
+#define INT4_DEBUG 1
 
 /// Helper to initialize a block of device data
 template <class Element>
