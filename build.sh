@@ -27,8 +27,8 @@ unset IGC_VISAOptions
 # ================= compiler / driver =================
 # https://github.com/intel/llvm/releases/tag/nightly-2024-05-16
 # https://ubit-gfx.intel.com/build/19168301/artifacts
-sycl_compiler_path=/opt/cutlass/compiler/20250304/
-gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-29010/extract/
+sycl_compiler_path=/opt/cutlass/compiler/20250415/
+gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-29142/extract/
 export CPATH=$sycl_compiler_path:$sycl_compiler_path/include/:$sycl_compiler_path/include/sycl/
 export LIBRARY_PATH=$gpu_driver_path/usr/lib/x86_64-linux-gnu/:$sycl_compiler_path/lib/
 export LD_LIBRARY_PATH=$LIBRARY_PATH
@@ -60,10 +60,10 @@ export OCL_ICD_VENDORS=$HOME
 #target=./test/unit/cute/intel_xe/cutlass_test_unit_cute_intel_xe
 target=./examples/sycl/int4/pvc_gemm_int4_quantization
 
-cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path \
+cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path -DCMAKE_CXX_FLAGS_RELEASE=$1 \
 -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
 -DCMAKE_CXX_FLAGS=" -ftarget-register-alloc-mode=pvc:large -DSYCL_INTEL_TARGET -gline-tables-only " \
-&& ninja -v $target && $target --m=4096 --n=4096 --k=4096 --l=1 --iterations=0
+&& ninja -v $target && $target --m=4096 --n=4096 --k=4096 --l=1 --iterations=32
 
 # -gline-tables-only
 

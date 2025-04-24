@@ -128,7 +128,11 @@ public:
 
   using GmemTiledCopyA = GmemTiledCopyA_;
   using GmemTiledCopyB = GmemTiledCopyB_;
+#ifdef PASS_DEBUG
   using GmemTiledCopyScale = XE_2D_U16x1x32_LD_NN;  // TODO(Codeplay): generalize
+#else
+  using GmemTiledCopyScale = XE_2D_U16x1x32_LD_N;  // TODO(Codeplay): generalize
+#endif
 
   using SmemLayoutAtomA = SmemLayoutAtomA_;
   using SmemLayoutAtomB = SmemLayoutAtomB_;
@@ -614,20 +618,23 @@ public:
                         fragment_zero_input);
       }
 
-      if (thread0() && k_tile == 0) {
 #ifdef PASS_DEBUG
+      if (thread0() && k_tile == 0) {
         PRINT_S(copy_tCrS);
         PRINT_S(copy_tCrZ);
+      }
 #endif
-        for (int s =0; s < copy_tCrS.size(); s++) {
+
+#if 0
+      if (thread0() && k_tile == 0) {
+        for (int s = 0; s < copy_tCrS.size(); s++) {
           PRINT_S((float)(copy_tCrS[s]));
         }
-        for (int s =0; s < copy_tCrZ.size(); s++) {
+        for (int s = 0; s < copy_tCrZ.size(); s++) {
           PRINT_S((float)(copy_tCrZ[s]));
         }
-        PRINT_S((float)(mma_B[0]));
       }
-
+#endif
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
     }
   }

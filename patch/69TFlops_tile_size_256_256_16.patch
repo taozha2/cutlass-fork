@@ -1,0 +1,63 @@
+diff --git a/examples/sycl/int4/pvc_gemm_int4_quantization.cpp b/examples/sycl/int4/pvc_gemm_int4_quantization.cpp
+index ed108faa..26473146 100755
+--- a/examples/sycl/int4/pvc_gemm_int4_quantization.cpp
++++ b/examples/sycl/int4/pvc_gemm_int4_quantization.cpp
+@@ -532,12 +532,12 @@ int main(int argc, const char** argv)
+   using ElementScale = MmaType;
+ 
+   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
+-  using GmemTiledCopyA = XE_2D_U4x16x32_LD_NN;
++  using GmemTiledCopyA = XE_2D_U4x16x64_LD_NN;
+   using GmemTiledCopyB = XE_2D_U16x32x16_LD_N;
+   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
+ 
+   // Workgroup-level tile
+-  using TileShape = Shape<_256, _128, _16>;
++  using TileShape = Shape<_256, _256, _16>;
+ 
+   using TiledMma =
+       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
+diff --git a/include/cutlass/epilogue/collective/xe_epilogue.hpp b/include/cutlass/epilogue/collective/xe_epilogue.hpp
+index 461a2e92..8863b1db 100644
+--- a/include/cutlass/epilogue/collective/xe_epilogue.hpp
++++ b/include/cutlass/epilogue/collective/xe_epilogue.hpp
+@@ -667,7 +667,7 @@ public:
+     auto thread_xe_store_d = params.xe_store_d.get_thread_slice(get_sub_group_local_id());
+     Tensor tCgD_tmp = thread_xe_store_d.partition_D(gD);
+     auto offset = tCgD_tmp.data().get() - gD.data().get();
+-    Tensor tCgD = make_tensor(tCgD_tmp.data() + offset * 1 /*3*/ , make_layout(Shape<_8, _4, _2>{}, make_stride(4096, 32768, _1{})));//make_layout(tCgD_tmp.shape(), make_stride(N, 8 * N, _1{})));
++    Tensor tCgD = make_tensor(tCgD_tmp.data() + offset * 1 /*3*/ , make_layout(Shape<_8, _4, Shape<_2, _2>>{}, make_stride(4096, 32768, Stride<_1, _32>{})));//make_layout(tCgD_tmp.shape(), make_stride(N, 8 * N, _1{})));
+ 
+     // if (cutlass::thread(24, 4)) {
+     //   print("11111111111111111:\n");
+diff --git a/include/cutlass/gemm/collective/xe_mma_mixed_input.hpp b/include/cutlass/gemm/collective/xe_mma_mixed_input.hpp
+index 723cc64e..96382cde 100644
+--- a/include/cutlass/gemm/collective/xe_mma_mixed_input.hpp
++++ b/include/cutlass/gemm/collective/xe_mma_mixed_input.hpp
+@@ -341,7 +341,7 @@ public:
+       // }
+ 
+ #if ALGORITHM == 0
+-      auto&& dst_ptr = *(intel::ushort32*)(out.data());
++      auto&& dst_ptr = *(intel::ushort64*)(out.data());
+       #pragma unroll
+       for (int v = 0; v < v_cnt; v++) {
+         #pragma unroll
+@@ -487,7 +487,7 @@ public:
+     // layout else we need mode N_iter from fragment_B layout.
+     using FragScaleLayout = std::conditional_t<IsATransformed,
+                                                Layout<Shape<_2, _1, _1>>,
+-                                               Layout<Shape<_2, _1, _1>>>;
++                                               Layout<Shape<_2, _2, _1>>>;
+     Tensor fragment_scale_input = make_tensor<NonVoidElementScale>(FragScaleLayout{});
+     Tensor fragment_zero_input =  make_tensor<NonVoidElementZero> (FragScaleLayout{});
+ 
+@@ -541,7 +541,7 @@ public:
+                                        make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
+       }else{
+         return make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
+-                           make_layout(make_shape(_2{}, _1{}, _1{}, k_tile_count), 
++                           make_layout(make_shape(_2{}, _2{}, _1{}, k_tile_count), 
+                                        make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
+       }
+     }();
