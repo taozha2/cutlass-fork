@@ -31,7 +31,7 @@ export LIBRARY_PATH=$gpu_driver_path/usr/lib/x86_64-linux-gnu/:$sycl_compiler_pa
 export LD_LIBRARY_PATH=$LIBRARY_PATH
 export clang_path=${sycl_compiler_path}/bin/clang++
 
-export IGC_DisableLoopUnroll=1
+#export IGC_DisableLoopUnroll=1
 #export IGC_allowDecompose2DBlockFuncs=0
 
 output=intel_gpu_pvc
@@ -52,5 +52,5 @@ target=./examples/sycl/int4/pvc_gemm_int4_quantization
 cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path -DCMAKE_CXX_FLAGS_RELEASE=$1 \
 -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
 -DCMAKE_CXX_FLAGS=" -ftarget-register-alloc-mode=pvc:large -DSYCL_INTEL_TARGET -gline-tables-only " \
-&& ninja -v $target && $target --m=4096 --n=4096 --k=32 --l=1 --iterations=0
+&& ninja -v $target && $target --m=4096 --n=4096 --k=16 --l=1 --iterations=0
 

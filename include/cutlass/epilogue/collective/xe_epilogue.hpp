@@ -249,6 +249,7 @@ public:
       Accumulator accumulators, 
       TiledMma tiled_mma,
       int thread_idx) {
+        #if 0
 
     (void) tiled_mma;
     using namespace cute;
@@ -388,6 +389,7 @@ public:
     }
 
     cst_callbacks.end();
+    #endif
   }
 
 private:

@@ -40,6 +40,8 @@
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
+#define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
+
 namespace cutlass::gemm::collective {
 using namespace cute;
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -280,47 +282,24 @@ public:
   };
 
   /// Utilities to transform A.
-  template <class EngineIn,
-            class EngineOut, 
-            class EngineScales, 
+  template <class EngineOut,
             class EngineZeros, 
-            class LayoutIn,
             class LayoutOut,
-            class LayoutScales,
             class LayoutZeros,
             class... Ts>
   CUTLASS_DEVICE
-  void transform_quant(
-    Tensor<EngineIn, LayoutIn> const& tCrA_load, 
-    Tensor<EngineOut, LayoutOut>& tCrA_mma,
-    Tensor<EngineScales, LayoutScales>& tCrS_input,
+  void transform_quant(Tensor<EngineOut, LayoutOut>& tCrA_mma,
     Tensor<EngineZeros, LayoutZeros>& tCrZ_input
   ) {
-
-    static_assert(is_rmem<EngineIn>::value, "Input tensor for A conversion must come from registers");
-    static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
-    static_assert(size_v<LayoutOut> == cosize_v<LayoutOut>);
-    static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineScales::value_type>);
-    static_assert(std::is_same_v<typename EngineOut::value_type, typename EngineZeros::value_type>);
-    static_assert(std::is_same_v<LayoutScales, LayoutZeros>);
-
-    static constexpr auto DPAS = decltype(size<0>(tCrA_load))::value;
-    static constexpr auto N = decltype(size<1>(tCrA_load))::value;
-
     CUTLASS_PRAGMA_UNROLL
-    for (int i = 0; i < N; ++i) {
+    for (int i = 0; i < 2; ++i) {
       CUTLASS_PRAGMA_UNROLL
-      for (int j = 0; j < DPAS; ++j) {
-        tCrA_mma(_, i, _)[j] *= tCrS_input(i);
+      for (int j = 0; j < 16; ++j) {
         tCrA_mma(_, i, _)[j] += tCrZ_input(i);
       }
     }
 
     if (thread0()) {
-#ifdef PASS_DEBUG
-      PRINT_S(tCrZ_input);
-      PRINT_S(tCrS_input);
-#endif
       PRINT_S((float)(tCrA_mma[0]));
     }
   }
@@ -349,9 +328,6 @@ public:
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
     // Partition the copying of A and B tiles across the threads
-    auto thr_copy_A = mainloop.tiled_copy_a.get_slice(thread_idx);
-    auto thr_copy_B = mainloop.tiled_copy_b.get_slice(thread_idx);
-    auto thr_copy_scale = mainloop.tiled_copy_scale.get_slice(thread_idx);
     auto thr_copy_zero = mainloop.tiled_copy_zero.get_slice(thread_idx);
 
     // Instantiate the MMA object and get thread slice
@@ -368,86 +344,55 @@ public:
     Tensor mma_A = make_tensor<ElementMMA>(make_fragment_layout(mainloop.tiled_copy_a, tCgA(_,_,_,0).shape()));
     Tensor mma_B = make_tensor<ElementMMA>(make_fragment_layout(mainloop.tiled_copy_b, tCgB(_,_,_,0).shape()));
 
-    // If IsATransformed, we need modes M_atom, and M_iter from fragment_A
-    // layout else we need mode N_iter from fragment_B layout.
-    using FragScaleLayout = std::conditional_t<IsATransformed,
-                                               Layout<Shape<_2, _1, _1>>,
-                                               Layout<Shape<_2, _1, _1>>>;
-    Tensor fragment_scale_input = make_tensor<NonVoidElementScale>(FragScaleLayout{});
+    using FragScaleLayout = Layout<Shape<_2, _1, _1>>;
     Tensor fragment_zero_input =  make_tensor<NonVoidElementZero> (FragScaleLayout{});
 
     // narrow input fragment
-    Tensor quant_frag = make_tensor<ElementQuant>(
-        std::conditional_t<IsATransformed, decltype(mma_A.layout()),
-                           decltype(mma_B.layout())>{});
+    Tensor quant_frag = make_tensor<ElementQuant>(decltype(mma_B.layout()) {});
 
-    static_assert(std::is_same_v<typename decltype(quant_frag)::value_type, ElementQuant>);
-    static_assert(std::is_same_v<typename decltype(mma_A)::value_type, ElementMMA>);
-    static_assert(std::is_same_v<typename decltype(mma_B)::value_type, ElementMMA>);
-
-    // Retile for copy
-    auto [frag_copy_A, frag_copy_B] = [&](){
-      if constexpr (IsATransformed) {
-        return std::make_pair(thr_copy_A.retile_D(quant_frag), thr_copy_B.retile_D(mma_B));
-      } else {
-        return std::make_pair(thr_copy_A.retile_D(mma_A), thr_copy_B.retile_D(quant_frag));
-      }
-    }();
-
-    Tensor copy_tCrS = thr_copy_scale.retile_D(fragment_scale_input);
     Tensor copy_tCrZ = thr_copy_zero.retile_D(fragment_zero_input);
 
-    // Retile global tile for copies
-    Tensor tAgA = thr_copy_A.retile_S(tCgA);
-    Tensor tBgB = thr_copy_B.retile_S(tCgB);
-
-    auto tiled_prefetch_a = cute::prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(mainloop.tiled_copy_a);;
-    auto tiled_prefetch_b = cute::prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(mainloop.tiled_copy_b);;
-    auto thr_prefetch_A = tiled_prefetch_a.get_slice(thread_idx);
-    auto thr_prefetch_B = tiled_prefetch_b.get_slice(thread_idx);
-
-    // Partition global tile for prefetch
-    auto pAgA = thr_prefetch_A.partition_S(gA);
-    auto pBgB = thr_prefetch_B.partition_S(gB);
-
-    //
-    // Mainloop
-    //
-    // TODO(Codeplay): Define these coord tensors using proper cute logic 
     auto [m_idx, n_idx, k_idx, l_idx] = blk_coord;
     const int m_coord = m_idx * BLK_M + (get_sub_group_id() / ATOM_N) * SG_M;
     const int n_coord = n_idx * BLK_N + (get_sub_group_id() % ATOM_N) * SG_N;
     const int l_coord = l_idx;
 
-    Tensor copy_iter_s = [&](){
-      if constexpr(IsATransformed){
-        return make_tensor(make_inttuple_iter(make_coord(m_coord, 0, l_coord)),
+    Tensor copy_iter_s = make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
                            make_layout(make_shape(_2{}, _1{}, _1{}, k_tile_count), 
                                        make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
-      }else{
-        return make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
-                           make_layout(make_shape(_2{}, _1{}, _1{}, k_tile_count), 
-                                       make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
-      }
-    }();
 
-    const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
-    int prefetch_k = 0;
-
-    const int k_reload_factor = mainloop.group_size / BLK_K; 
-
-    for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
+    //
+    // Mainloop
+    //
+    // for (int k_tile = 0; k_tile < 1; ++k_tile) {
       // copy a
       // copy b
       // prefetch a
       // prefetch b
-      copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
-      copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
 
-      transform_quant(quant_frag, mma_B, fragment_scale_input,
-                        fragment_zero_input);
-      cute::gemm(tiled_mma, mma_A, mma_B, accum);
-    }
+      static constexpr auto bSize = decltype(mma_B.size())::value;
+      static constexpr auto zSize = decltype(copy_tCrZ.size())::value;
+      static_assert(bSize == 32 && zSize == 2);
+
+      copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, 0), copy_tCrZ);
+
+      mma_B[0] = 0.f;
+
+      CUTLASS_PRAGMA_UNROLL
+      for (int i = 0; i < zSize; ++i) {
+        mma_B[0] += copy_tCrZ[i];  // mma_B and copy_tCrZ are both fp16 tensor
+      }
+
+      if (thread0()) {
+#ifdef PASS_DEBUG
+        PRINT_S(copy_tCrZ.data());  // just print the data pointer can make result correct
+#endif
+        PRINT_S((float)(mma_B[0]));
+      }
+
+      // transform_quant(mma_B, fragment_zero_input);
+      // cute::gemm(tiled_mma, mma_A, mma_B, accum);
+    // }
   }
 };
 

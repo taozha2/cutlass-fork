@@ -334,7 +334,7 @@ struct ExampleRunner {
       std::vector<Element> stage(block.size(), Element(1.0f));
       for (int i =0; i < 1; i++) {
         for (int j =0; j < 4096; j++) {
-          stage[i * 4096 +j] = (Element)((j +2) % 7);
+          stage[i * 4096 +j] = (Element)((j +1) % 7);
         }
       }
       block.copy_from_host(stage.data());
@@ -350,6 +350,7 @@ struct ExampleRunner {
         block.get(), block.size(), seed, Element(scope_max), Element(scope_min));
 #endif
     }
+
     return true;
   }
 
@@ -403,7 +404,9 @@ struct ExampleRunner {
     initialize_block(block_C, seed + 2021);
 
     initialize_scale(block_scale, options);
-    initialize_zero(block_zero, options);
+    initialize_scale(block_zero, options);
+
+    syclcompat::wait();
 
     auto layout_A = make_layout(shape_A, stride_A);
     auto layout_B = make_layout(shape_B, stride_B);

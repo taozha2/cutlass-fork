@@ -454,7 +454,6 @@ struct XE_2D_U16x1x32_LD_NN {
     __builtin_IB_subgroup_block_read_flat_u32_m1k16v1(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 #if 0
-#define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
 
     if (thread0()) {
       print("XE_2D_U16x1x32_LD_NN\n");
