@@ -40,6 +40,8 @@
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
+#define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
+
 namespace cutlass::gemm::collective {
 using namespace cute;
 /////////////////////////////////////////////////////////////////////////////////////////////////
@@ -310,8 +312,6 @@ public:
     using SrcType = typename EngineIn::value_type;
     using DstType = typename EngineOut::value_type;
 
-    #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
-
     auto &&in = tCrA_load;
     auto &&out = tCrA_mma;
 
@@ -418,16 +418,6 @@ public:
         // 16 x 4 x 1 values for B
         // 16 x 1 of these are same K
         // 4 different scale/zero values per thread, no exchange needed
-
-        //   for (int i =0; i < tCrS_input.size(); i++) {
-        //     PRINT_S((float)(tCrS_input[i]));
-        //   }
-
-        //   for (int i =0; i < tCrZ_input.size(); i++) {
-        //     PRINT_S((float)(tCrZ_input[i]));
-        //   }
-        // }
-
         static constexpr auto DPAS = decltype(size<0>(in))::value;
         static constexpr auto N = decltype(size<1>(in))::value;
 
@@ -445,13 +435,6 @@ public:
             }
           }
         }
-
-#if 0
-        if (thread0()) {
-          PRINT_S((float)(tCrA_mma[0]));
-        }
-#endif
-
       }
     }
   }
@@ -618,14 +601,6 @@ public:
         copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
       }
 
-      #define PRINT_S(x) print(#x); print(", "); print((x)); print(", \n");
-
-      if (thread0() && k_tile == 0) {
-        for (int s =0; s < fragment_scale_input.size(); s++) {
-          PRINT_S((float)(fragment_scale_input[s]));
-        }
-      }
-
       if(prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
@@ -639,12 +614,19 @@ public:
                         fragment_zero_input);
       }
 
-      // if(cutlass::thread(0, 0) && k_tile == 0) {
-      //   PRINT_S(mma_B);
-      //   for(int i =0; i < mma_B.size(); i++) {
-      //     PRINT_S((float)(mma_B[i]));
-      //   }
-      //  }
+      if (thread0() && k_tile == 0) {
+#ifdef PASS_DEBUG
+        PRINT_S(copy_tCrS);
+        PRINT_S(copy_tCrZ);
+#endif
+        for (int s =0; s < copy_tCrS.size(); s++) {
+          PRINT_S((float)(copy_tCrS[s]));
+        }
+        for (int s =0; s < copy_tCrZ.size(); s++) {
+          PRINT_S((float)(copy_tCrZ[s]));
+        }
+        PRINT_S((float)(mma_B[0]));
+      }
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
     }

@@ -63,7 +63,7 @@ target=./examples/sycl/int4/pvc_gemm_int4_quantization
 cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path \
 -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
 -DCMAKE_CXX_FLAGS=" -ftarget-register-alloc-mode=pvc:large -DSYCL_INTEL_TARGET -gline-tables-only " \
-&& ninja -v $target && $target --m=4096 --n=4096 --k=4096 --l=1 --iterations=20
+&& ninja -v $target && $target --m=4096 --n=4096 --k=4096 --l=1 --iterations=0
 
 # -gline-tables-only
 
