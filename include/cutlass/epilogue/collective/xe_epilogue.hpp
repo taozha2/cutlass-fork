@@ -603,7 +603,8 @@ public:
     Accumulator accumulators, 
     TiledMma tiled_mma,
     int thread_idx) {
-  
+      #if 1
+
     (void) tiled_mma;
     using namespace cute;
 
@@ -667,17 +668,20 @@ public:
     auto thread_xe_store_d = params.xe_store_d.get_thread_slice(get_sub_group_local_id());
     Tensor tCgD_tmp = thread_xe_store_d.partition_D(gD);
     auto offset = tCgD_tmp.data().get() - gD.data().get();
-    Tensor tCgD = make_tensor(tCgD_tmp.data() + offset * 1 /*3*/ , make_layout(Shape<_8, _4, _2>{}, make_stride(4096, 32768, _1{})));//make_layout(tCgD_tmp.shape(), make_stride(N, 8 * N, _1{})));
+    Tensor tCgD = make_tensor(tCgD_tmp.data() + offset * 1 /*3*/ , make_layout(
+          make_shape(size<0>(tCgD_tmp.shape()), size<1>(tCgD_tmp.shape()), size<2>(tCgD_tmp.shape())),
+          make_stride(get<1>(get<0>(tCgD_tmp.stride())), size<1>(tCgD_tmp.stride()), _1{})));
 
-    // if (cutlass::thread(24, 4)) {
-    //   print("11111111111111111:\n");
-    //   print("mD_mnl: "); print(mD_mnl); print("\n");
-    //   print("g_wg_D: ");print(g_wg_D); print("\n");
-    //   print("gD: ");print(gD); print("\n");
-    //   print("tCgD_tmp: ");print(tCgD_tmp); print("\n");
-    //   print("tCgD: ");print(tCgD); print("\n");
-
-    // }
+#if 0
+    if (cutlass::thread(0, 0)) {
+      print("11111111111111111:\n");
+      print("mD_mnl: "); print(mD_mnl); print("\n");
+      print("g_wg_D: ");print(g_wg_D); print("\n");
+      print("gD: ");print(gD); print("\n");
+      print("tCgD_tmp: ");print(tCgD_tmp); print("\n");
+      print("tCgD: ");print(tCgD); print("\n");
+    }
+#endif
 
     Tensor trC = make_tensor<typename TiledMma::ValTypeC>(Shape<Int<FragmentSize>>{});
     Tensor trD = make_tensor<typename TiledMma::ValTypeD>(Shape<Int<FragmentSize>>{});
@@ -765,6 +769,7 @@ public:
     }
 
     cst_callbacks.end();
+    #endif
   }
 
 private:
