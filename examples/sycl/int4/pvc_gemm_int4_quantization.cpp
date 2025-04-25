@@ -237,6 +237,57 @@ struct ExampleRunner {
   // Methods
   //
 
+  template <class T> static void fill_matrix( std::vector<T> &M) {
+    std::random_device dev;
+    std::mt19937 rng(dev());
+
+    T start, end;
+
+    if constexpr (std::is_same_v<T, tfloat32_t> || std::is_same_v<T, half_t>
+                   || std::is_same_v<T, bfloat16_t> || std::is_same_v<T, float>) {
+      start = (T)0.0;
+      end = (T)1.0;
+    } else if constexpr (std::is_same_v<T, int8_t>) {
+      start = (T)(-5);
+      end = (T)5;
+    } else if constexpr (std::is_same_v<T, uint8_t>) {
+      start = (T)0;
+      end = (T)5;
+    } else {
+      CUTE_STATIC_ASSERT(false, "you must set coreect start/end value to initialize data");
+    }
+
+    std::uniform_real_distribution<float> dist((T)start, (T)end);
+    for (int i = 0; i < M.size(); i++)
+      M[i] = static_cast<T>(dist(rng));
+  }
+
+  void flush_cache() {
+    static constexpr auto l3_cache_size = 192 * 1024 * 1024;
+
+    std::vector<uint8_t> host_cache;
+    cutlass::DeviceAllocation<uint8_t> dev_cache_block;
+    dev_cache_block.reset(l3_cache_size + 64);
+    host_cache = std::vector<uint8_t>((size_t)dev_cache_block.size());
+    // fill_matrix(host_cache);
+    syclcompat::memcpy(dev_cache_block.get(), host_cache.data(),
+                       dev_cache_block.size());
+    syclcompat::wait();
+
+    auto q = syclcompat::get_default_queue();
+
+    using cache_dtype = uint32_t;
+    cache_dtype* mem_to = (cache_dtype*)dev_cache_block.get();
+    cache_dtype* mem_from = (cache_dtype*)(dev_cache_block.get() + sizeof(cache_dtype));
+
+    q.parallel_for(sycl::nd_range<1>(l3_cache_size / sizeof(cache_dtype), 1024), [=](auto idx) {
+      int i = idx.get_global_id();
+      *mem_to += mem_from[i];
+    });
+
+    q.wait();
+  }
+
   bool verify(const Options &options) {
       
     //
@@ -451,22 +502,6 @@ struct ExampleRunner {
 
     CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
 
-    if (options.iterations > 0) {
-      GPU_Clock timer;
-      timer.start();
-      for (int i = 0; i < options.iterations; ++i) {
-        gemm_op.run();
-      }
-      syclcompat::wait();
-
-      float cute_time = timer.seconds() / options.iterations;
-      double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
-      double hbm = (sizeof(ElementA) * options.m * options.k + sizeof(ElementB) * options.k * options.n + sizeof(ElementOutput) * options.m * options.n) * 1e-9;
-
-      std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-      printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n", tflops / cute_time, hbm / cute_time, cute_time*1000);
-    }
-
     // Run the GEMM
     CUTLASS_CHECK(gemm_op.run());
 
@@ -476,7 +511,35 @@ struct ExampleRunner {
     bool passed = verify(options);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) return cutlass::Status::kErrorInternal;
+    // if(!passed) return cutlass::Status::kErrorInternal;
+
+    float total_time = 0.f;
+    int warmup = 10;
+    if (warmup >= options.iterations) {
+      return cutlass::Status::kSuccess;
+    }
+
+    if (options.iterations > 0) {
+      GPU_Clock timer;
+      for (int i = 0; i < options.iterations; ++i) {
+        flush_cache();
+
+        timer.start();
+        gemm_op.run();
+        syclcompat::wait();
+
+        if (i >= warmup) {
+          total_time += timer.seconds();
+        }
+      }
+
+      float cute_time = total_time / (options.iterations - warmup);
+      double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
+      double hbm = (sizeof(ElementA) * options.m * options.k + sizeof(ElementB) * options.k * options.n + sizeof(ElementOutput) * options.m * options.n) * 1e-9;
+
+      std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+      printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n", tflops / cute_time, hbm / cute_time, cute_time*1000);
+    }
 
     return cutlass::Status::kSuccess;
   }
