@@ -451,17 +451,6 @@ struct ExampleRunner {
 
     CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
 
-    // Run the GEMM
-    CUTLASS_CHECK(gemm_op.run());
-
-    syclcompat::wait();
-
-    // Verify that the result is correct
-    bool passed = verify(options);
-    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
-
-    // if(!passed) return cutlass::Status::kErrorInternal;
-
     if (options.iterations > 0) {
       GPU_Clock timer;
       timer.start();
@@ -477,6 +466,17 @@ struct ExampleRunner {
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
       printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n", tflops / cute_time, hbm / cute_time, cute_time*1000);
     }
+
+    // Run the GEMM
+    CUTLASS_CHECK(gemm_op.run());
+
+    syclcompat::wait();
+
+    // Verify that the result is correct
+    bool passed = verify(options);
+    std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
+
+    if(!passed) return cutlass::Status::kErrorInternal;
 
     return cutlass::Status::kSuccess;
   }
