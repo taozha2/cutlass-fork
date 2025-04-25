@@ -209,6 +209,9 @@ struct ExampleRunner {
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
+  static constexpr auto l3_cache_size = 192 * 1024 * 1024;
+
+  static constexpr auto cache_cnt = 3;
 
   //
   // Data members
@@ -439,9 +442,9 @@ struct ExampleRunner {
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
     stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale_zero);
 
-    block_A.reset(M * K * L);
+    block_A.reset(l3_cache_size * cache_cnt / sizeof(ElementA));
     block_A_dq.reset(M * K * L);
-    block_B.reset(K * N * L);
+    block_B.reset(l3_cache_size * cache_cnt);
     block_B_dq.reset(K * N * L);
     block_C.reset(M * N * L);
     block_D.reset(M * N * L);
@@ -520,13 +523,26 @@ struct ExampleRunner {
     }
 
     if (options.iterations > 0) {
-      GPU_Clock timer;
       for (int i = 0; i < options.iterations; ++i) {
-        flush_cache();
+        // flush_cache();
+        typename Gemm::GemmKernel::Arguments arguments1{
+          cutlass::gemm::GemmUniversalMode::kGemm,
+          problem_size,
+          {(char*)(block_A.get())) + (i % cache_cnt )* l3_cache_size, stride_A, (char*)(block_B.get()) + (i % cache_cnt) * l3_cache_size, stride_B, block_scale.get(),
+           stride_S, options.g, block_zero.get()},
+          {{options.alpha, options.beta},
+           block_C.get(),
+           stride_C,
+           block_D.get(),
+           stride_D},
+          hw_info};
 
+        CUTLASS_CHECK(gemm_op.initialize(arguments1, workspace.get()));
+
+        GPU_Clock timer;
         timer.start();
         gemm_op.run();
-        syclcompat::wait();
+        // syclcompat::wait();
 
         if (i >= warmup) {
           total_time += timer.seconds();
@@ -598,11 +614,11 @@ int main(int argc, const char** argv)
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
   using GmemTiledCopyA = XE_2D_U4x16x32_LD_NN;
-  using GmemTiledCopyB = XE_2D_U16x32x16_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x8x16_LD_N;
   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 
   // Workgroup-level tile
-  using TileShape = Shape<_32, _128, _16>;
+  using TileShape = Shape<_8, _128, _16>;
 
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,

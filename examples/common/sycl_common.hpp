@@ -121,7 +121,7 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
 
     static constexpr auto elements_per_byte = cute::sizeof_bits_v<int8_t> / cute::sizeof_bits_v<T1>;
 
-    int loop_cnt = block_device.size() / array_size;
+    int loop_cnt = block_device_dq.size() / array_size;
     for (int i = 0; i < loop_cnt; i++) {
       cutlass::device_memory::copy_to_device(block_device.get() + (i * array_size) / elements_per_byte,
                                     raw_pointer_cast(block_host.begin()),
@@ -131,7 +131,7 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
                                     array_size);
     }
 
-    auto tail_size = block_device.size() % array_size;
+    auto tail_size = block_device_dq.size() % array_size;
     if (tail_size) {
       cutlass::device_memory::copy_to_device(block_device.get() + (loop_cnt * array_size) / elements_per_byte,
                                     raw_pointer_cast(block_host.begin()),
