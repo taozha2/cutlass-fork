@@ -79,16 +79,16 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
 
   int bits_input = cute::sizeof_bits_v<T1>;
   T1 scope_max, scope_min;
-  if (bits_input == 1) {
-   scope_max = T1(2);
-   scope_min = T1(0);
-  } else if (bits_input <= 8) {
-    scope_max = T1(2);
-    scope_min = T1(-2);
-  } else {
-    scope_max = T1(8);
-    scope_min = T1(-8);
-  }
+  // if (bits_input == 1) {
+  //  scope_max = T1(2);
+  //  scope_min = T1(0);
+  // } else if (bits_input <= 8) {
+  //   scope_max = T1(2);
+  //   scope_min = T1(-2);
+  // } else {
+  //   scope_max = T1(8);
+  //   scope_min = T1(-8);
+  // }
 
   std::uniform_int_distribution<> dist((T1)0, (T1)7);
 

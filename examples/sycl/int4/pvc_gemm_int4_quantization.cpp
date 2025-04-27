@@ -211,7 +211,7 @@ struct ExampleRunner {
 
   static constexpr auto l3_cache_size = 192 * 1024 * 1024;
 
-  static constexpr auto cache_cnt = 3;
+  static constexpr auto cache_cnt = 2;
 
   //
   // Data members
@@ -613,12 +613,12 @@ int main(int argc, const char** argv)
   using ElementScale = MmaType;
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
-  using GmemTiledCopyA = XE_2D_U4x16x32_LD_NN;
+  using GmemTiledCopyA = XE_2D_U4x16x64_LD_NN;
   using GmemTiledCopyB = XE_2D_U16x8x16_LD_N;
   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 
   // Workgroup-level tile
-  using TileShape = Shape<_32, _256, _16>;
+  using TileShape = Shape<_32, _512, _16>;
 
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,

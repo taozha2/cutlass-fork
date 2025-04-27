@@ -278,6 +278,12 @@ public:
     return Params{tiled_copy_a, tiled_copy_b, tiled_copy_scale, tiled_copy_zero, args.group_size};
   }
 
+#ifdef __SYCL_DEVICE_ONLY__
+template <class T, int N> using vector_t = T __attribute__((ext_vector_type(N)));
+#else
+template <class T, int N> using vector_t = sycl::marray<T, N>;
+#endif
+
   // Helper functions to select packing for conversion
   template <class SrcType,
             class DstType,
@@ -319,7 +325,7 @@ public:
     auto &&in = tCrA_load;
     auto &&out = tCrA_mma;
 
-#define ALGORITHM 0
+#define ALGORITHM 2
 
    if constexpr (sizeof_bits_v<SrcType> < 8) {
       // TODO: Current NumericArrayConverter doesn't work for int4 on intel Xe, just workaround and
@@ -344,7 +350,7 @@ public:
       // }
 
 #if ALGORITHM == 0
-      auto&& dst_ptr = *(intel::ushort32*)(out.data());
+      auto&& dst_ptr = *(vector_t<ushort, SG_N>*)(out.data());
       #pragma unroll
       for (int v = 0; v < v_cnt; v++) {
         #pragma unroll
@@ -430,7 +436,7 @@ public:
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < DPAS; ++j) {
 #if ALGORITHM == 2
-            tCrA_mma(_, i, _)[j] = in(_, i, _)[j] * tCrS_input(i);
+            tCrA_mma(_, i, _)[j] = (uint)(in(_, i, _)[j]) * tCrS_input(i);
 #else
             tCrA_mma(_, i, _)[j] *= tCrS_input(i);
 #endif
@@ -490,7 +496,7 @@ public:
     // layout else we need mode N_iter from fragment_B layout.
     using FragScaleLayout = std::conditional_t<IsATransformed,
                                                Layout<Shape<_2, _1, _1>>,
-                                               Layout<Shape<_2, _1, _1>>>;
+                                               Layout<Shape<_2, Int<SG_N / 32>, _1>>>;
     Tensor fragment_scale_input = make_tensor<NonVoidElementScale>(FragScaleLayout{});
     Tensor fragment_zero_input =  make_tensor<NonVoidElementZero> (FragScaleLayout{});
 
@@ -544,7 +550,7 @@ public:
                                        make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
       }else{
         return make_tensor(make_inttuple_iter(make_coord(n_coord, 0, l_coord)),
-                           make_layout(make_shape(_2{}, _1{}, _1{}, k_tile_count), 
+                           make_layout(make_shape(_2{}, Int<SG_N / 32>{}, _1{}, k_tile_count), 
                                        make_stride(E<0>{} * _16{}, E<0>{} * _32{}, _0{}, E<1>{} * _1{})));
       }
     }();

@@ -668,9 +668,9 @@ public:
     auto thread_xe_store_d = params.xe_store_d.get_thread_slice(get_sub_group_local_id());
     Tensor tCgD_tmp = thread_xe_store_d.partition_D(gD);
     auto offset = tCgD_tmp.data().get() - gD.data().get();
-    Tensor tCgD = make_tensor(tCgD_tmp.data() + offset * 1 /*3*/ , make_layout(
-          make_shape(size<0>(tCgD_tmp.shape()), size<1>(tCgD_tmp.shape()), size<2>(tCgD_tmp.shape())),
-          make_stride(get<1>(get<0>(tCgD_tmp.stride())), size<1>(tCgD_tmp.stride()), _1{})));
+    Tensor tCgD = make_tensor(tCgD_tmp.data() + offset *1 , make_layout(
+          make_shape(size<0>(tCgD_tmp.shape()), size<1>(tCgD_tmp.shape()), make_shape(2, size<2>(tCgD_tmp.shape()) / 2)),
+          make_stride(get<1>(get<0>(tCgD_tmp.stride())), size<1>(tCgD_tmp.stride()), make_stride(_1{}, 32))));
 
 #if 0
     if (cutlass::thread(0, 0)) {
