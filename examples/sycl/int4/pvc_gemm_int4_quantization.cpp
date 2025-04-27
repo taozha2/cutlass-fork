@@ -511,13 +511,13 @@ struct ExampleRunner {
 
     CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
 
+#ifdef PASS_DEBUG
     // Run the GEMM
     CUTLASS_CHECK(gemm_op.run());
 
     syclcompat::wait();
 
     // Verify that the result is correct
-#ifdef PASS_DEBUG
     bool passed = verify(options);
 #else
     bool passed = false;
@@ -532,6 +532,9 @@ struct ExampleRunner {
       return cutlass::Status::kSuccess;
     }
 
+    double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
+    double hbm = (sizeof(ElementA) * options.m * options.k + sizeof(ElementB) * options.k * options.n + sizeof(ElementOutput) * options.m * options.n) * 1e-9;
+
     if (options.iterations > 0) {
       for (int i = 0; i < options.iterations; ++i) {
         // flush_cache();
@@ -541,7 +544,7 @@ struct ExampleRunner {
         typename Gemm::GemmKernel::Arguments arguments1{
           cutlass::gemm::GemmUniversalMode::kGemm,
           problem_size,
-          {block_A.get(), stride_A, block_B.get() + (i % cache_cnt) * l3_cache_size / 2, stride_B, block_scale.get(),
+          {block_A.get(), stride_A, block_B.get()/* + (i % cache_cnt) * l3_cache_size / 2*/, stride_B, block_scale.get(),
            stride_S, options.g, block_zero.get()},
           {{options.alpha, options.beta},
            block_C.get(),
@@ -557,18 +560,21 @@ struct ExampleRunner {
         timer.start();
         gemm_op.run();
         // syclcompat::wait();
+        auto ctime = timer.seconds();
 
         if (i >= warmup) {
-          total_time += timer.seconds();
+          total_time += ctime;
         }
+  
+        std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+        printf("Cutlass GEMM Performance [%d]:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n", i, tflops / ctime, hbm / ctime, ctime*1000);
+  
       }
 
       float cute_time = total_time / (options.iterations - warmup);
-      double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
-      double hbm = (sizeof(ElementA) * options.m * options.k + sizeof(ElementB) * options.k * options.n + sizeof(ElementOutput) * options.m * options.n) * 1e-9;
 
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-      printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n", tflops / cute_time, hbm / cute_time, cute_time*1000);
+      printf("Cutlass GEMM Performance average:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n", tflops / cute_time, hbm / cute_time, cute_time*1000);
     }
 
     return cutlass::Status::kSuccess;
