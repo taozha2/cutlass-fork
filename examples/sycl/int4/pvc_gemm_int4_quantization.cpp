@@ -528,7 +528,7 @@ struct ExampleRunner {
         typename Gemm::GemmKernel::Arguments arguments1{
           cutlass::gemm::GemmUniversalMode::kGemm,
           problem_size,
-          {(char*)(block_A.get())) + (i % cache_cnt )* l3_cache_size, stride_A, (char*)(block_B.get()) + (i % cache_cnt) * l3_cache_size, stride_B, block_scale.get(),
+          {block_A.get() + (i % cache_cnt) * l3_cache_size / sizeof(ElementA), stride_A, block_B.get() + (i % cache_cnt) * l3_cache_size, stride_B, block_scale.get(),
            stride_S, options.g, block_zero.get()},
           {{options.alpha, options.beta},
            block_C.get(),
@@ -618,11 +618,11 @@ int main(int argc, const char** argv)
   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 
   // Workgroup-level tile
-  using TileShape = Shape<_8, _128, _16>;
+  using TileShape = Shape<_32, _256, _16>;
 
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
-                                    Layout<Shape<_1, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+                                    Layout<Shape<_4, _8, _1>, Stride<_8, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCMixedPrecision<PipelineStages>;

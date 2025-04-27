@@ -325,7 +325,7 @@ public:
       // TODO: Current NumericArrayConverter doesn't work for int4 on intel Xe, just workaround and
       // hardcode here for functionality test, will remove this branch in the future.
 
-      using format_type = int8_t;
+      using format_type = uint8_t;
       static constexpr auto src_bits = sizeof_bits_v<SrcType>;
       static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
       auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
@@ -351,8 +351,8 @@ public:
         for (int j = 0; j < scalar; j++) {
           #pragma unroll
           for (int i = 0; i < loop_cnt; i++) {
-            dst_ptr[v * loop_cnt * scalar + j * loop_cnt + i] = bit_cast<ushort>(static_cast<_Float16>((int32_t)(static_cast<SrcType>(
-              (src_ptr[v * loop_cnt + i] >> (src_bits * j)) & 0xf))));
+            dst_ptr[v * loop_cnt * scalar + j * loop_cnt + i] = bit_cast<ushort>(static_cast<_Float16>(/*(int32_t)/*(static_cast<SrcType>*/(
+              (src_ptr[v * loop_cnt + i] >> (src_bits * j)) & 0xf)));
           }
         }
       }
