@@ -66,6 +66,8 @@
 #include "helper.h"
 #include "cutlass/util/mixed_dtype_utils.hpp"
 
+#define MByte (1024 * 1024)
+
 using namespace cute;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -88,15 +90,16 @@ struct Options {
   bool a_narrower;
   int mode;
   int m, n, k, l, iterations;
-  int g;
+  int g, warmup;
   float alpha, beta;
+  int flush_cache, cache_cnt, l3_cache;
 
   Options():
     help(false),
     error(false),
     m(5120), n(4096), k(4096), l(1), iterations(20),
     g(128), mode(2), a_narrower(false),
-    alpha(1.f), beta(0.f)
+    alpha(1.f), beta(0.f), warmup(0), flush_cache(0), cache_cnt(3)
   { }
 
   // Parses the command line
@@ -117,6 +120,11 @@ struct Options {
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("warmup", warmup, 0);
+    cmd.get_cmd_line_argument("flush_cache", flush_cache, 0);
+    cmd.get_cmd_line_argument("cache_cnt", cache_cnt, 3);
+    cmd.get_cmd_line_argument("l3_cache", l3_cache, 192);
+
     a_narrower = false;
 
     // if (cmd.check_cmd_line_flag("a_narrower")) {
@@ -209,10 +217,6 @@ struct ExampleRunner {
 
   using ProblemShapeType = typename Gemm::GemmKernel::ProblemShape;
 
-  static constexpr auto l3_cache_size = 192 * 1024 * 1024;
-
-  static constexpr auto cache_cnt = 3;
-
   //
   // Data members
   //
@@ -265,9 +269,7 @@ struct ExampleRunner {
       M[i] = static_cast<T>(dist(rng));
   }
 
-  void flush_cache() {
-    static constexpr auto l3_cache_size = 192 * 1024 * 1024;
-
+  void flush_cache(int l3_cache_size) {
     std::vector<uint8_t> host_cache;
     cutlass::DeviceAllocation<uint8_t> dev_cache_block;
     dev_cache_block.reset(l3_cache_size + 64);
@@ -442,11 +444,11 @@ struct ExampleRunner {
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
     stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale_zero);
 
-    #ifdef PASS_DEBUG
+#ifdef PASS_DEBUG
     block_B.reset(K * N * L);
-    #else
-    block_B.reset(l3_cache_size * cache_cnt);
-    #endif
+#else
+    block_B.reset(options.l3_cache * MByte * options.cache_cnt);
+#endif
 
     block_A.reset(M * K * L);
     block_A_dq.reset(M * K * L);
@@ -469,6 +471,7 @@ struct ExampleRunner {
     auto layout_B = make_layout(shape_B, stride_B);
     auto layout_scale_zero = make_layout(shape_scale_zero, stride_S);
 
+#ifdef PASS_DEBUG
     // Note that we are overwriting the relevant `block_X_dq` here, both were
     // filled by initialize_mixed_dtype_block above
     if constexpr (AIsNarrower) {
@@ -479,10 +482,13 @@ struct ExampleRunner {
       cutlass::dequantize(block_B_dq.get(), block_B.get(), layout_B,
                         block_scale.get(), block_zero.get(), layout_scale_zero,
                         options.g);
-    }
+    } 
+#endif
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
+    auto l3_cache_size = options.l3_cache * MByte;
+
     ProblemShapeType problem_size = ProblemShapeType{options.m, options.n, options.k, options.l};
 
     initialize(options);
@@ -527,33 +533,43 @@ struct ExampleRunner {
     // if(!passed) return cutlass::Status::kErrorInternal;
 
     float total_time = 0.f;
-    int warmup = 10;
-    if (warmup >= options.iterations) {
+    if (options.warmup >= options.iterations) {
       return cutlass::Status::kSuccess;
     }
 
     double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
     double hbm = (sizeof(ElementA) * options.m * options.k + sizeof(ElementB) * options.k * options.n + sizeof(ElementOutput) * options.m * options.n) * 1e-9;
 
+    std::cout << "\nProblem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+    printf("--l=%d --iterations=%d --flush_cache=%d\n", options.l, options.iterations, options.flush_cache);
+    printf("--warmup=%d, --cache_cnt=%d, --l3_cache_size=%d\n\n", options.warmup, options.cache_cnt, l3_cache_size);
+
     if (options.iterations > 0) {
       for (int i = 0; i < options.iterations; ++i) {
-        // flush_cache();
+        // flush_cache(l3_cache_size);
 #ifdef PASS_DEBUG
         CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
 #else
-        typename Gemm::GemmKernel::Arguments arguments1{
-          cutlass::gemm::GemmUniversalMode::kGemm,
-          problem_size,
-          {block_A.get(), stride_A, block_B.get()/* + (i % cache_cnt) * l3_cache_size / 2*/, stride_B, block_scale.get(),
-           stride_S, options.g, block_zero.get()},
-          {{options.alpha, options.beta},
-           block_C.get(),
-           stride_C,
-           block_D.get(),
-           stride_D},
-          hw_info};
-
-        CUTLASS_CHECK(gemm_op.initialize(arguments1, workspace.get()));
+        if (options.flush_cache != 0) {
+          if (i < options.warmup) {
+            CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
+          } else {
+            typename Gemm::GemmKernel::Arguments arguments1{
+              cutlass::gemm::GemmUniversalMode::kGemm,
+              problem_size,
+              {block_A.get(), stride_A, block_B.get() + ((i - options.warmup + 1) % options.cache_cnt) * l3_cache_size / 2, stride_B, block_scale.get(),
+              stride_S, options.g, block_zero.get()},
+              {{options.alpha, options.beta},
+              block_C.get(),
+              stride_C,
+              block_D.get(),
+              stride_D},
+              hw_info};
+              CUTLASS_CHECK(gemm_op.initialize(arguments1, workspace.get()));
+          }
+        } else {
+          CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
+        }
 #endif
 
         GPU_Clock timer;
@@ -562,18 +578,15 @@ struct ExampleRunner {
         // syclcompat::wait();
         auto ctime = timer.seconds();
 
-        if (i >= warmup) {
+        if (i >= options.warmup) {
           total_time += ctime;
         }
   
-        std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
         printf("Cutlass GEMM Performance [%d]:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n", i, tflops / ctime, hbm / ctime, ctime*1000);
-  
       }
 
-      float cute_time = total_time / (options.iterations - warmup);
+      float cute_time = total_time / (options.iterations - options.warmup);
 
-      std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
       printf("Cutlass GEMM Performance average:     [%4.3f]TFlop/s  [%4.3f]GB/s  (%6.4f)ms\n", tflops / cute_time, hbm / cute_time, cute_time*1000);
     }
 
