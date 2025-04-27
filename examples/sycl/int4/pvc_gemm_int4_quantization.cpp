@@ -211,7 +211,7 @@ struct ExampleRunner {
 
   static constexpr auto l3_cache_size = 192 * 1024 * 1024;
 
-  static constexpr auto cache_cnt = 2;
+  static constexpr auto cache_cnt = 3;
 
   //
   // Data members
@@ -442,9 +442,15 @@ struct ExampleRunner {
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
     stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale_zero);
 
-    block_A.reset(l3_cache_size * cache_cnt / sizeof(ElementA));
-    block_A_dq.reset(M * K * L);
+    #ifdef PASS_DEBUG
+    block_B.reset(K * N * L);
+    #else
     block_B.reset(l3_cache_size * cache_cnt);
+    #endif
+
+    block_A.reset(M * K * L);
+    block_A_dq.reset(M * K * L);
+
     block_B_dq.reset(K * N * L);
     block_C.reset(M * N * L);
     block_D.reset(M * N * L);
@@ -511,7 +517,11 @@ struct ExampleRunner {
     syclcompat::wait();
 
     // Verify that the result is correct
+#ifdef PASS_DEBUG
     bool passed = verify(options);
+#else
+    bool passed = false;
+#endif
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     // if(!passed) return cutlass::Status::kErrorInternal;
@@ -525,10 +535,13 @@ struct ExampleRunner {
     if (options.iterations > 0) {
       for (int i = 0; i < options.iterations; ++i) {
         // flush_cache();
+#ifdef PASS_DEBUG
+        CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
+#else
         typename Gemm::GemmKernel::Arguments arguments1{
           cutlass::gemm::GemmUniversalMode::kGemm,
           problem_size,
-          {block_A.get() + (i % cache_cnt) * l3_cache_size / sizeof(ElementA), stride_A, block_B.get() + (i % cache_cnt) * l3_cache_size, stride_B, block_scale.get(),
+          {block_A.get(), stride_A, block_B.get() + (i % cache_cnt) * l3_cache_size / 2, stride_B, block_scale.get(),
            stride_S, options.g, block_zero.get()},
           {{options.alpha, options.beta},
            block_C.get(),
@@ -538,6 +551,7 @@ struct ExampleRunner {
           hw_info};
 
         CUTLASS_CHECK(gemm_op.initialize(arguments1, workspace.get()));
+#endif
 
         GPU_Clock timer;
         timer.start();
@@ -624,7 +638,7 @@ int main(int argc, const char** argv)
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
                                     Layout<Shape<_1, _8, _1>, Stride<_8, _1, _0>>>::TiledMMA;
 
-  constexpr int PipelineStages = 3;
+  constexpr int PipelineStages = 4;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCMixedPrecision<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
