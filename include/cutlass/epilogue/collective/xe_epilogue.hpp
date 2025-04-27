@@ -763,7 +763,9 @@ public:
             }
             // print(tCgD(_, epi_m, epi_n)); print("\n");
           }
-          copy(/*params.xe_store_d, */trD, tCgD(_, epi_m, epi_n));
+          // if (get_sub_group_id() < 4 ) {
+            copy(/*params.xe_store_d, */trD, tCgD(_, epi_m, epi_n));
+          // }
         }
       }
     }

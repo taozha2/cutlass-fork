@@ -50,16 +50,11 @@ export IGC_VISAPreSchedCtrl=6
 export IGC_EnableVISANoSchedule=0
 export IGC_ShaderDumpEnable=1
 export IGC_DumpToCustomDir=${script_dir}/build/mm_dumps
-#export IGC_VISAOptions="-newspillcost "
-#export IGC_DisableLoopUnroll=1
-#export IGC_VectorAliasBBThreshold=1500
-#export IGC_VISAOptions="-perfmodel"
 
 export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
-export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
-export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
-export IGC_VISAOptions="-perfmodel"
-export IGC_VectorAliasBBThreshold=100000000000
+#export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
+#export IGC_VISAOptions="-perfmodel"
+#export IGC_VectorAliasBBThreshold=100000000000
 
 
 export ZE_AFFINITY_MASK=0

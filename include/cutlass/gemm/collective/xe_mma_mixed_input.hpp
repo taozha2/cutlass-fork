@@ -325,7 +325,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     auto &&in = tCrA_load;
     auto &&out = tCrA_mma;
 
-#define ALGORITHM 2
+#define ALGORITHM 0
 
    if constexpr (sizeof_bits_v<SrcType> < 8) {
       // TODO: Current NumericArrayConverter doesn't work for int4 on intel Xe, just workaround and
@@ -357,7 +357,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
         for (int j = 0; j < scalar; j++) {
           #pragma unroll
           for (int i = 0; i < loop_cnt; i++) {
-            dst_ptr[v * loop_cnt * scalar + j * loop_cnt + i] = bit_cast<ushort>(static_cast<_Float16>(/*(int32_t)/*(static_cast<SrcType>*/(
+            dst_ptr[v * loop_cnt * scalar + j * loop_cnt + i] = bit_cast<ushort>(static_cast<_Float16>((uint32_t)/*(static_cast<SrcType>*/(
               (src_ptr[v * loop_cnt + i] >> (src_bits * j)) & 0xf)));
           }
         }
