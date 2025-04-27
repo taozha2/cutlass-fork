@@ -538,7 +538,9 @@ struct ExampleRunner {
     }
 
     double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
-    double hbm = (sizeof(ElementA) * options.m * options.k + sizeof(ElementB) * options.k * options.n + sizeof(ElementOutput) * options.m * options.n) * 1e-9;
+    double hbm = (sizeof_bits_v<ElementA> * options.m * options.k / 8 +
+                  sizeof_bits_v<ElementB> * options.k * options.n / 8 +
+                  sizeof_bits_v<ElementOutput> * options.m * options.n / 8) * 1e-9;
 
     std::cout << "\nProblem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
     printf("--l=%d --iterations=%d --flush_cache=%d\n", options.l, options.iterations, options.flush_cache);
