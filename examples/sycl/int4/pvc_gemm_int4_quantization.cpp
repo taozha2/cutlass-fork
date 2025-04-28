@@ -312,7 +312,7 @@ struct ExampleRunner {
     //
 
     using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-    using GmemTiledCopyB = XE_2D_U16x32x32_LD_V;
+    using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
 
     // Workgroup-level tile
     using TileShape = Shape<_256, _256, _32>;

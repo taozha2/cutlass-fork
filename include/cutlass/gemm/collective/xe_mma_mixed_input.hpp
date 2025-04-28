@@ -129,11 +129,11 @@ public:
 
   using GmemTiledCopyA = GmemTiledCopyA_;
   using GmemTiledCopyB = GmemTiledCopyB_;
-#ifdef PASS_DEBUG
-  using GmemTiledCopyScale = XE_2D_U16x1x32_LD_NN;  // TODO(Codeplay): generalize
-#else
+// #ifdef PASS_DEBUG
+//   using GmemTiledCopyScale = XE_2D_U16x1x32_LD_NN;  // TODO(Codeplay): generalize
+// #else
   using GmemTiledCopyScale = XE_2D_U16x1x32_LD_N;  // TODO(Codeplay): generalize
-#endif
+// #endif
 
   using SmemLayoutAtomA = SmemLayoutAtomA_;
   using SmemLayoutAtomB = SmemLayoutAtomB_;
@@ -326,7 +326,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     auto &&in = tCrA_load;
     auto &&out = tCrA_mma;
 
-#define ALGORITHM 0
+#define ALGORITHM 2
 
    if constexpr (sizeof_bits_v<SrcType> < 8) {
       // TODO: Current NumericArrayConverter doesn't work for int4 on intel Xe, just workaround and
@@ -601,6 +601,8 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
 
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
+      barrier_arrive(2);
+
       // Copy gmem to rmem for the first k_tile
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
@@ -643,6 +645,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
       }
 #endif
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
+      barrier_wait(2);
     }
   }
 };
