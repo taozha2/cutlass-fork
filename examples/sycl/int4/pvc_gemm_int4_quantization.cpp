@@ -456,11 +456,7 @@ struct ExampleRunner {
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, shape_CD);
     stride_S = cutlass::make_cute_packed_stride(StrideScale{}, shape_scale_zero);
 
-#ifdef PASS_DEBUG
     block_B.reset(K * N * L);
-#else
-    block_B.reset(options.l3_cache * MByte * options.cache_cnt);
-#endif
 
     block_A.reset(M * K * L);
     block_A_dq.reset(M * K * L);
@@ -483,7 +479,6 @@ struct ExampleRunner {
     auto layout_B = make_layout(shape_B, stride_B);
     auto layout_scale_zero = make_layout(shape_scale_zero, stride_S);
 
-#ifdef PASS_DEBUG
     // Note that we are overwriting the relevant `block_X_dq` here, both were
     // filled by initialize_mixed_dtype_block above
     if constexpr (AIsNarrower) {
@@ -495,7 +490,6 @@ struct ExampleRunner {
                         block_scale.get(), block_zero.get(), layout_scale_zero,
                         options.g);
     } 
-#endif
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
@@ -535,7 +529,6 @@ struct ExampleRunner {
 
     CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
 
-#ifdef PASS_DEBUG
     // Run the GEMM
     CUTLASS_CHECK(gemm_op.run());
 
@@ -543,9 +536,7 @@ struct ExampleRunner {
 
     // Verify that the result is correct
     bool passed = verify(options);
-#else
-    bool passed = false;
-#endif
+
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
     // if(!passed) return cutlass::Status::kErrorInternal;
@@ -567,9 +558,6 @@ struct ExampleRunner {
     if (options.iterations > 0) {
       for (int i = 0; i < options.iterations; ++i) {
         // flush_cache(l3_cache_size);
-#ifdef PASS_DEBUG
-        CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
-#else
         if (options.flush_cache != 0) {
           if (i < options.warmup) {
             CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
@@ -590,7 +578,6 @@ struct ExampleRunner {
         } else {
           CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
         }
-#endif
 
         GPU_Clock timer;
         timer.start();

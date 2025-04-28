@@ -68,7 +68,7 @@ bool initialize_block(
   return initialize_block<Element>(block.get(), block.size(), seed);
 }
 
-#ifdef PASS_DEBUG
+#if 1//PASS_DEBUG
 template <typename T1, typename T2>
 void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
                            cutlass::DeviceAllocation<T2>& block_device_dq,

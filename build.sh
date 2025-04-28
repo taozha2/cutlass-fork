@@ -51,7 +51,7 @@ export IGC_EnableVISANoSchedule=0
 export IGC_ShaderDumpEnable=1
 export IGC_DumpToCustomDir=${script_dir}/build/mm_dumps
 
-export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
+#export IGC_ExtraOCLOptions="-cl-intel-256-GRF-per-thread"
 #export SYCL_PROGRAM_COMPILE_OPTIONS="-ze-opt-large-register-file -gline-tables-only"
 #export IGC_VISAOptions="-perfmodel"
 #export IGC_VectorAliasBBThreshold=100000000000
@@ -71,7 +71,7 @@ target=./examples/sycl/int4/pvc_gemm_int4_quantization
 cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path -DCMAKE_CXX_FLAGS_RELEASE=$1 \
 -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
 -DCMAKE_CXX_FLAGS=" -ftarget-register-alloc-mode=pvc:auto -DSYCL_INTEL_TARGET -gline-tables-only " \
-&& ninja -v $target && $target --m=32 --n=14336 --k=4096 --l=1 --iterations=20 --flush_cache=1 --warmup=10 --l3_cache_size=192 --cache_cnt=3 --splitk --splits=4
+&& ninja -v $target && $target --m=32 --n=14336 --k=4096 --l=1 --iterations=0 --flush_cache=1 --warmup=10 --l3_cache_size=192 --cache_cnt=1 --splitk --splits=4
 
 # -gline-tables-only
 

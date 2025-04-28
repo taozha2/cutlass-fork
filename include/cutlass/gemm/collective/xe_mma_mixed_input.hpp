@@ -589,7 +589,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
   #endif
 
     const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
-    int prefetch_k = 0;
+    int prefetch_k = k_start_idx;
 
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++, prefetch_k++) {
@@ -600,18 +600,19 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     const int k_reload_factor = mainloop.group_size / BLK_K; 
 
     CUTLASS_PRAGMA_UNROLL
-    for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
+    for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
+
       barrier_arrive(2);
 
       // Copy gmem to rmem for the first k_tile
-      copy(mainloop.tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
-      copy(mainloop.tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
+      copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile), frag_copy_A);
+      copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), frag_copy_B);
 
       if constexpr(ModeHasScales){
-        copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
+        copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_tile / k_reload_factor), copy_tCrS);
       }
       if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-        copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
+        copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_tile / k_reload_factor), copy_tCrZ);
       }
 
       if(prefetch_k < k_tile_count) {
