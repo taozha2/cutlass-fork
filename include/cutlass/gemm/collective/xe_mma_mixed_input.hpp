@@ -350,7 +350,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
       // }
 
 #if ALGORITHM == 0
-      auto&& dst_ptr = *(vector_t<ushort, SG_N>*)(out.data());
+      auto&& dst_ptr = *(vector_t<ushort, decltype(size(out))::value>*)(out.data());
       #pragma unroll
       for (int v = 0; v < v_cnt; v++) {
         #pragma unroll
@@ -430,7 +430,10 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
         // 4 different scale/zero values per thread, no exchange needed
         static constexpr auto DPAS = decltype(size<0>(in))::value;
         static constexpr auto N = decltype(size<1>(in))::value;
+        static constexpr auto K = decltype(size<2>(in))::value;
 
+        CUTLASS_PRAGMA_UNROLL
+        for (int k = 0; k < K; ++k) {
         CUTLASS_PRAGMA_UNROLL
         for (int i = 0; i < N; ++i) {
           CUTLASS_PRAGMA_UNROLL
@@ -438,13 +441,14 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
 #if ALGORITHM == 2
             tCrA_mma(_, i, _)[j] = (uint)(in(_, i, _)[j]) * tCrS_input(i);
 #else
-            tCrA_mma(_, i, _)[j] *= tCrS_input(i);
+            tCrA_mma(j, i, k) *= tCrS_input(i);
 #endif
             if constexpr (KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
-              tCrA_mma(_, i, _)[j] += tCrZ_input(i);
+              tCrA_mma(j, i, k) += tCrZ_input(i);
             }
           }
         }
+      }
       }
     }
   }
