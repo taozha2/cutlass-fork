@@ -734,16 +734,16 @@ int main(int argc, const char** argv)
   //         MainloopAConvertAndScaleWithZeroPoint>;
 
   // B-narrow Mainloop & GemmUniversalAdapter
-  using MainloopBConvertOnly =
-      MixedBuilderQuantB::CollectiveMma<ElementInputB,
-                                        cute::tuple<ElementInputA>>;
-  using GemmBConvertOnly =
-      GemmAdapterBuilder::GemmUniversalAdapter<MainloopBConvertOnly>;
+  // using MainloopBConvertOnly =
+  //     MixedBuilderQuantB::CollectiveMma<ElementInputB,
+  //                                       cute::tuple<ElementInputA>>;
+  // using GemmBConvertOnly =
+  //     GemmAdapterBuilder::GemmUniversalAdapter<MainloopBConvertOnly>;
 
-  using MainloopBConvertAndScale = MixedBuilderQuantB::CollectiveMma<
-      ElementInputB, cute::tuple<ElementInputA, ElementScale>>;
-  using GemmBConvertAndScale =
-      GemmAdapterBuilder::GemmUniversalAdapter<MainloopBConvertAndScale>;
+  // using MainloopBConvertAndScale = MixedBuilderQuantB::CollectiveMma<
+  //     ElementInputB, cute::tuple<ElementInputA, ElementScale>>;
+  // using GemmBConvertAndScale =
+  //     GemmAdapterBuilder::GemmUniversalAdapter<MainloopBConvertAndScale>;
 
   using MainloopBConvertAndScaleWithZeroPoint =
       MixedBuilderQuantB::CollectiveMma<
@@ -766,16 +766,16 @@ int main(int argc, const char** argv)
     // }
   }else{
     std::cout << "Setting B as narrower type" << std::endl;
-    if(options.mode ==  GemmMode::ConvertOnly) {
-      std::cout << "Running in ConvertOnly mode." << std::endl;
-      CUTLASS_CHECK(ExampleRunner<GemmBConvertOnly>{}.run(options, hw_info));
-    }else if(options.mode == GemmMode::ConvertAndScale){
-      std::cout << "Running in ConvertAndScale mode." << std::endl;
-      CUTLASS_CHECK(ExampleRunner<GemmBConvertAndScale>{}.run(options, hw_info));
-    }else{
+    // if(options.mode ==  GemmMode::ConvertOnly) {
+    //   std::cout << "Running in ConvertOnly mode." << std::endl;
+    //   CUTLASS_CHECK(ExampleRunner<GemmBConvertOnly>{}.run(options, hw_info));
+    // }else if(options.mode == GemmMode::ConvertAndScale){
+    //   std::cout << "Running in ConvertAndScale mode." << std::endl;
+    //   CUTLASS_CHECK(ExampleRunner<GemmBConvertAndScale>{}.run(options, hw_info));
+    // }else{
       std::cout << "Running in ConvertAndScaleWithZeroPoint mode." << std::endl;
       CUTLASS_CHECK(ExampleRunner<GemmBConvertAndScaleWithZeroPoint>{}.run(options, hw_info));
-    }
+    // }
   }
 
   return 0;

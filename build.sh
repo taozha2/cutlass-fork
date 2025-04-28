@@ -66,6 +66,8 @@ export OCL_ICD_VENDORS=$HOME
 #target=./test/unit/cute/intel_xe/cutlass_test_unit_cute_intel_xe
 target=./examples/sycl/int4/pvc_gemm_int4_quantization
 
+#target=./examples/sycl/05_pvc_gemm_with_epilogues/05_pvc_gemm_with_epilogue_softmax
+
 cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path -DCMAKE_CXX_FLAGS_RELEASE=$1 \
 -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
 -DCMAKE_CXX_FLAGS=" -ftarget-register-alloc-mode=pvc:auto -DSYCL_INTEL_TARGET -gline-tables-only " \

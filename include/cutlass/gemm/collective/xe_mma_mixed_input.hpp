@@ -96,7 +96,7 @@ public:
   //
   // Type Aliases
   //
-  using DispatchPolicy = MainloopIntelPVCMixedPrecision<Stages>;
+  using DispatchPolicy = MainloopIntelPVCMixedPrecision<Stages, Schedule>;
   using WorkgroupTileShape = TileShape_;
 
   
