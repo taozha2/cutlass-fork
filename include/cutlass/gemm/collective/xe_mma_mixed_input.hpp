@@ -48,6 +48,7 @@ using namespace cute;
 
 template <
   int Stages,
+  class Schedule,
   class TileShape_,
   class ElementAOptionalTuple,
   class StrideA_,
@@ -63,7 +64,7 @@ template <
   class SmemCopyAtomB_,
   class TransformB_>
 struct CollectiveMma<
-    MainloopIntelPVCMixedPrecision<Stages>,
+    MainloopIntelPVCMixedPrecision<Stages, Schedule>,
     TileShape_,
     ElementAOptionalTuple,
     StrideA_,
@@ -593,7 +594,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++, prefetch_k++) {
       prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
-      prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
+      // prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
     }
 
     const int k_reload_factor = mainloop.group_size / BLK_K; 
@@ -613,7 +614,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
 
       if(prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
-        prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
+        // prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
       }
 
       if constexpr (IsATransformed) {

@@ -87,19 +87,21 @@ struct Options {
   bool help;
   bool error;
 
+  bool splitk, dp;
+
   bool a_narrower;
   int mode;
   int m, n, k, l, iterations;
   int g, warmup;
   float alpha, beta;
-  int flush_cache, cache_cnt, l3_cache;
+  int flush_cache, cache_cnt, l3_cache, splits;
 
   Options():
     help(false),
     error(false),
     m(5120), n(4096), k(4096), l(1), iterations(20),
     g(128), mode(2), a_narrower(false),
-    alpha(1.f), beta(0.f), warmup(0), flush_cache(0), cache_cnt(3)
+    alpha(1.f), beta(0.f), warmup(0), flush_cache(0), cache_cnt(3), splitk(false), dp(false)
   { }
 
   // Parses the command line
@@ -109,6 +111,14 @@ struct Options {
     if (cmd.check_cmd_line_flag("help")) {
       help = true;
       return;
+    }
+
+    if (cmd.check_cmd_line_flag("splitk")) {
+      splitk = true;
+    }
+
+    if (cmd.check_cmd_line_flag("dp")) {
+      dp = true;
     }
 
     cmd.get_cmd_line_argument("m", m, 5120);
@@ -124,6 +134,8 @@ struct Options {
     cmd.get_cmd_line_argument("flush_cache", flush_cache, 0);
     cmd.get_cmd_line_argument("cache_cnt", cache_cnt, 3);
     cmd.get_cmd_line_argument("l3_cache", l3_cache, 192);
+    cmd.get_cmd_line_argument("splits", splits, 0);
+    cmd.get_cmd_line_argument("splitk", splitk, 0);
 
     a_narrower = false;
 
@@ -173,7 +185,7 @@ struct MixedGemmUniversalAdapterBuilder {
   template <typename CollectiveMainloop>
   using GemmUniversalAdapter =
       device::GemmUniversalAdapter<kernel::GemmUniversal<
-          ProblemShape, CollectiveMainloop, CollectiveEpilogue>>;
+          ProblemShape, CollectiveMainloop, CollectiveEpilogue, cutlass::gemm::StreamKScheduler>>;
 };
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -503,7 +515,13 @@ struct ExampleRunner {
          stride_C,
          block_D.get(),
          stride_D},
-        hw_info};
+        hw_info,
+        {options.splits, // Setting splits > 1 will force SplitK decomposition
+          // Set the decomposition mode based on user provided options
+          options.dp ? cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::DataParallel :
+          options.splitk ? cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::SplitK :
+                              cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::StreamK}
+      };
 
     Gemm gemm_op;
 
@@ -640,7 +658,7 @@ int main(int argc, const char** argv)
   using ElementOutput = float;           // <- data type of elements in output matrix D
 
   using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
@@ -648,7 +666,7 @@ int main(int argc, const char** argv)
   using ElementScale = MmaType;
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
-  using GmemTiledCopyA = XE_2D_U4x16x32_LD_NN;
+  using GmemTiledCopyA = XE_2D_U4x16x16_LD_T;
   using GmemTiledCopyB = XE_2D_U16x32x16_LD_N;
   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 
@@ -660,7 +678,7 @@ int main(int argc, const char** argv)
                                     Layout<Shape<_1, _8, _1>, Stride<_8, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 4;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCMixedPrecision<PipelineStages>;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCMixedPrecision<PipelineStages, cutlass::gemm::KernelPVCCooperative>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
@@ -678,17 +696,17 @@ int main(int argc, const char** argv)
           FusionCallBacks,
           XE_2D_U32x8x16_LD_N,
           void, void,
-          void,
+          XE_2D_U32x8x16_ST_N,
           void, void>;
 
   // Use the helpers to avoid template arg repetition
   using GemmAdapterBuilder = helpers::MixedGemmUniversalAdapterBuilder<Shape<int, int, int, int>, CollectiveEpilogue>;
 
-  using MixedBuilderQuantA =
-      helpers::MixedCollectiveMmaBuilder<GEMMDispatchPolicy, TileShape,
-                                cutlass::gemm::TagToStrideA_t<LayoutA>,
-                                cutlass::gemm::TagToStrideB_t<LayoutB>,
-                                TiledMma, GmemTiledCopyA, GmemTiledCopyB>;
+  // using MixedBuilderQuantA =
+  //     helpers::MixedCollectiveMmaBuilder<GEMMDispatchPolicy, TileShape,
+  //                               cutlass::gemm::TagToStrideA_t<LayoutA>,
+  //                               cutlass::gemm::TagToStrideB_t<LayoutB>,
+  //                               TiledMma, GmemTiledCopyA, GmemTiledCopyB>;
 
   using MixedBuilderQuantB =
       helpers::MixedCollectiveMmaBuilder<GEMMDispatchPolicy, TileShape,
@@ -697,23 +715,23 @@ int main(int argc, const char** argv)
                                 TiledMma, GmemTiledCopyB, GmemTiledCopyA>;
 
   // A-narrow Mainloop & GemmUniversalAdapter
-  using MainloopAConvertOnly =
-      MixedBuilderQuantA::CollectiveMma<cute::tuple<ElementInputA>,
-                                        ElementInputB>;
-  using GemmAConvertOnly =
-      GemmAdapterBuilder::GemmUniversalAdapter<MainloopAConvertOnly>;
+  // using MainloopAConvertOnly =
+  //     MixedBuilderQuantA::CollectiveMma<cute::tuple<ElementInputA>,
+  //                                       ElementInputB>;
+  // using GemmAConvertOnly =
+  //     GemmAdapterBuilder::GemmUniversalAdapter<MainloopAConvertOnly>;
 
-  using MainloopAConvertAndScale = MixedBuilderQuantA::CollectiveMma<
-      cute::tuple<ElementInputA, ElementScale>, ElementInputB>;
-  using GemmAConvertAndScale =
-      GemmAdapterBuilder::GemmUniversalAdapter<MainloopAConvertAndScale>;
+  // using MainloopAConvertAndScale = MixedBuilderQuantA::CollectiveMma<
+  //     cute::tuple<ElementInputA, ElementScale>, ElementInputB>;
+  // using GemmAConvertAndScale =
+  //     GemmAdapterBuilder::GemmUniversalAdapter<MainloopAConvertAndScale>;
 
-  using MainloopAConvertAndScaleWithZeroPoint =
-      MixedBuilderQuantA::CollectiveMma<
-          cute::tuple<ElementInputA, ElementScale, ElementZero>, ElementInputB>;
-  using GemmAConvertAndScaleWithZeroPoint =
-      GemmAdapterBuilder::GemmUniversalAdapter<
-          MainloopAConvertAndScaleWithZeroPoint>;
+  // using MainloopAConvertAndScaleWithZeroPoint =
+  //     MixedBuilderQuantA::CollectiveMma<
+  //         cute::tuple<ElementInputA, ElementScale, ElementZero>, ElementInputB>;
+  // using GemmAConvertAndScaleWithZeroPoint =
+  //     GemmAdapterBuilder::GemmUniversalAdapter<
+  //         MainloopAConvertAndScaleWithZeroPoint>;
 
   // B-narrow Mainloop & GemmUniversalAdapter
   using MainloopBConvertOnly =
