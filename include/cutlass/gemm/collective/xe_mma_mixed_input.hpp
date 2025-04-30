@@ -378,6 +378,9 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
         }
       }
 #endif
+#ifdef DISABLE_QUANTIZATION
+      return;
+#endif
     } else {
       auto const& src = tCrA_load(_, _, _);
       auto const& dst = tCrA_mma(_, _, _);
@@ -604,13 +607,14 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
 
+#ifdef DISABLE_QUANTIZATION
       if constexpr(ModeHasScales){
         copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
       }
       if constexpr(KernelConversionMode == ConversionMode::ConvertAndScaleWithZero){
         copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
       }
-
+#endif
       if(prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));

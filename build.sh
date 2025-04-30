@@ -70,7 +70,7 @@ cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path -DCMAKE_CXX_FLAGS_RELEA
 -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
 -DCMAKE_CXX_FLAGS=" -ftarget-register-alloc-mode=pvc:auto -DSYCL_INTEL_TARGET -gline-tables-only " \
 && ninja -v $target && \
-$target --m=32 --n=14336 --k=4096 --l=1 --iterations=20 --flush_cache=1 --warmup=10 --l3_cache_size=192 --cache_cnt=3
+$target --m=4096 --n=4096 --k=4096 --l=1 --iterations=20
 
 # -gline-tables-only
 
