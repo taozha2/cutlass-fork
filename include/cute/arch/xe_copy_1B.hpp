@@ -743,7 +743,7 @@ struct XE_2D_U8x1x64_LD_N {
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
       intel_sub_group_2d_block_prefetch_8b_1r32x2c(
-          (__global void*)baseoffset, width - 1, height - 1, pitch - 1, coord);
+          (__global void*)baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -775,7 +775,7 @@ struct XE_2D_U8x2x64_LD_N {
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
       intel_sub_group_2d_block_prefetch_8b_2r32x2c(
-          (__global void*)baseoffset, width - 1, height - 1, pitch - 1, coord);
+          (__global void*)baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -807,7 +807,7 @@ struct XE_2D_U8x4x64_LD_N {
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
       intel_sub_group_2d_block_prefetch_8b_4r32x2c(
-          (__global void*)baseoffset, width - 1, height - 1, pitch - 1, coord);
+          (__global void*)baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -839,7 +839,7 @@ struct XE_2D_U8x8x64_LD_N {
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
       intel_sub_group_2d_block_prefetch_8b_8r32x2c(
-          (__global void*)baseoffset, width - 1, height - 1, pitch - 1, coord);
+          (__global void*)baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -939,7 +939,7 @@ struct XE_2D_U8x32x16_LD_V {
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
       intel_sub_group_2d_block_prefetch_8b_32r16x1c(
-          (__global void*)baseoffset, width - 1, height - 1, pitch - 1, coord);
+          (__global void*)baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");

@@ -467,7 +467,7 @@ struct ExampleRunner {
     auto layout_B = make_layout(shape_B, stride_B);
     auto layout_scale_zero = make_layout(shape_scale_zero, stride_S);
 
-#ifndef DISABLE_QUANTIZATION
+#ifdef QUANTIZATION
 
     // Note that we are overwriting the relevant `block_X_dq` here, both were
     // filled by initialize_mixed_dtype_block above
