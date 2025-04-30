@@ -41,7 +41,7 @@ export clang_path=${sycl_compiler_path}/bin/clang++
 
 
 # ================= JIT / AOT =================
-output=intel_gpu_pvc
+output=intel_gpu_bmg_g21
 #output=spir64
 
 

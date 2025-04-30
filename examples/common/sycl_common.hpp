@@ -68,7 +68,6 @@ bool initialize_block(
   return initialize_block<Element>(block.get(), block.size(), seed);
 }
 
-#if 1//def PASS_DEBUG
 template <typename T1, typename T2>
 void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
                            cutlass::DeviceAllocation<T2>& block_device_dq,
@@ -134,63 +133,6 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
     }
   }
 }
-
-#else
-template <typename T1, typename T2>
-void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
-                           cutlass::DeviceAllocation<T2>& ,
-                          uint64_t seed) {
-  static_assert(cute::sizeof_bits_v<T2> >= 8);
-
-  std::ranlux24_base rng(std::random_device{}());
-  rng.seed(seed);
-
-  int bits_input = cute::sizeof_bits_v<T1>;
-
-  std::uniform_int_distribution<> dist((T1)0, (T1)7);
-
-  if constexpr (cute::sizeof_bits_v<T1> >= 8) {
-    auto block_host = std::vector<T1>(block_device.size());
-
-    for (int i = 0; i < block_host.size(); ++i) {
-      block_host[i] = static_cast<T1>(dist(rng));
-    }
-
-    block_device.copy_from_host(block_host.data());
-  } else {
-    static constexpr auto array_size = 32 * 4096;
-
-    cute::array_subbyte<T1, array_size> block_host{};
-
-    for (int i = 0; i < 32; ++i) {
-      for (int j = 0; j < 4096; ++j) {
-#if INT4_DEBUG
-      block_host[i * 4096 + j ] = static_cast<T1>((j +1) % 7);
-#else
-      block_host[i * 4096 + j ] = static_cast<T1>(dist(rng));
-#endif
-
-    }
-  }
-
-    static constexpr auto elements_per_byte = cute::sizeof_bits_v<int8_t> / cute::sizeof_bits_v<T1>;
-
-    int loop_cnt = block_device.size() / array_size;
-    for (int i = 0; i < loop_cnt; i++) {
-      cutlass::device_memory::copy_to_device(block_device.get() + (i * array_size) / elements_per_byte,
-                                    raw_pointer_cast(block_host.begin()),
-                                    array_size);
-    }
-
-    auto tail_size = block_device.size() % array_size;
-    if (tail_size) {
-      cutlass::device_memory::copy_to_device(block_device.get() + (loop_cnt * array_size) / elements_per_byte,
-                                    raw_pointer_cast(block_host.begin()),
-                                    tail_size);
-    }
-  }
-}
-#endif
 
 template <typename T1>
 void initialize_subbyte_block(cutlass::DeviceAllocation<T1>& block_device,
