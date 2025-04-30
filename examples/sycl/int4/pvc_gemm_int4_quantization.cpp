@@ -467,7 +467,7 @@ struct ExampleRunner {
     auto layout_B = make_layout(shape_B, stride_B);
     auto layout_scale_zero = make_layout(shape_scale_zero, stride_S);
 
-#ifdef DISABLE_QUANTIZATION
+#ifndef DISABLE_QUANTIZATION
 
     // Note that we are overwriting the relevant `block_X_dq` here, both were
     // filled by initialize_mixed_dtype_block above
@@ -616,12 +616,12 @@ int main(int argc, const char** argv)
   using ElementScale = MmaType;
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
-  using GmemTiledCopyA = XE_2D_U4x16x64_LD_NN;
+  using GmemTiledCopyA = XE_2D_U4x16x32_LD_NN;
   using GmemTiledCopyB = XE_2D_U16x32x16_LD_N;
   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 
   // Workgroup-level tile
-  using TileShape = Shape<_256, _256, _16>;
+  using TileShape = Shape<_256, _128, _16>;
 
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,

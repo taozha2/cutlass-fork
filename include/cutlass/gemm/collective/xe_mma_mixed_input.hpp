@@ -607,7 +607,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
 
-#ifdef DISABLE_QUANTIZATION
+#ifndef DISABLE_QUANTIZATION
       if constexpr(ModeHasScales){
         copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
       }
