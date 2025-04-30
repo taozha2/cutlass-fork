@@ -327,16 +327,20 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
       // TODO: Current NumericArrayConverter doesn't work for int4 on intel Xe, just workaround and
       // hardcode here for functionality test, will remove this branch in the future.
 
-      using format_type = uint8_t;
+      static constexpr auto DPAS = decltype(size<0>(in))::value;
+      static constexpr auto N = decltype(size<1>(in))::value;
+      static constexpr auto K = decltype(size<2>(in))::value;
+
+      using format_type = ushort;
       static constexpr auto src_bits = sizeof_bits_v<SrcType>;
       static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
       auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
-      static constexpr auto loop_cnt = decltype(size<0>(out))::value;
+      static constexpr auto loop_cnt = decltype(size(out))::value / scalar;
       static constexpr auto v_cnt = decltype(size(out))::value / scalar / loop_cnt;
 
       using namespace cutlass::platform;
 
-      static_assert(loop_cnt == 16);
+      // static_assert(loop_cnt == 16);
 
       // if(cutlass::thread(0, 0)) {
       //   PRINT_S(in);
