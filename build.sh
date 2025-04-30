@@ -41,7 +41,7 @@ export clang_path=${sycl_compiler_path}/bin/clang++
 
 
 # ================= JIT / AOT =================
-output=intel_gpu_bmg_g21
+output=intel_gpu_pvc
 #output=spir64
 
 
@@ -69,7 +69,8 @@ target=./examples/sycl/int4/pvc_gemm_int4_quantization
 cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path -DCMAKE_CXX_FLAGS_RELEASE=$1 \
 -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
 -DCMAKE_CXX_FLAGS=" -ftarget-register-alloc-mode=pvc:auto -DSYCL_INTEL_TARGET -gline-tables-only " \
-&& ninja -v $target && $target --m=32 --n=14336 --k=4096 --l=1 --iterations=20 --flush_cache=1 --warmup=10 --l3_cache_size=192 --cache_cnt=3
+&& ninja -v $target && \
+$target --m=32 --n=14336 --k=4096 --l=1 --iterations=20 --flush_cache=1 --warmup=10 --l3_cache_size=192 --cache_cnt=3
 
 # -gline-tables-only
 
