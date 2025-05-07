@@ -1,0 +1,226 @@
+diff --git a/build.sh b/build.sh
+index 463c3c88..22fff49c 100644
+--- a/build.sh
++++ b/build.sh
+@@ -70,7 +70,7 @@ cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path -DCMAKE_CXX_FLAGS_RELEA
+ -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
+ -DCMAKE_CXX_FLAGS=" -ftarget-register-alloc-mode=pvc:auto -DSYCL_INTEL_TARGET -gline-tables-only " \
+ && ninja -v $target && \
+-$target --m=4096 --n=4096 --k=4096 --l=1 --iterations=20
++$target --m=4096 --n=4096 --k=4096 --l=1 --iterations=0
+ 
+ # -gline-tables-only
+ 
+diff --git a/examples/sycl/int4/pvc_gemm_int4_quantization.cpp b/examples/sycl/int4/pvc_gemm_int4_quantization.cpp
+index 2043dd40..8c93d24c 100755
+--- a/examples/sycl/int4/pvc_gemm_int4_quantization.cpp
++++ b/examples/sycl/int4/pvc_gemm_int4_quantization.cpp
+@@ -627,7 +627,7 @@ int main(int argc, const char** argv)
+       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
+                                     Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+ 
+-  constexpr int PipelineStages = 2;
++  constexpr int PipelineStages = 4;
+   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCMixedPrecision<PipelineStages>;
+   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
+ 
+diff --git a/include/cute/arch/xe_copy_2B.hpp b/include/cute/arch/xe_copy_2B.hpp
+index bcc35791..0248cba9 100644
+--- a/include/cute/arch/xe_copy_2B.hpp
++++ b/include/cute/arch/xe_copy_2B.hpp
+@@ -64,6 +64,9 @@ SYCL_DEVICE_BUILTIN(cute::intel::int8 intel_subgroup_block_read_transform_u16_k1
+     int pitch_minus_one, cute::intel::coord_t coord));
+ 
+ // U16 prefetch
++SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m1k16v1(
++  intptr_t baseoffset, int width_minus_one, int height_minus_one,
++  int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
+ SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v1(
+     intptr_t baseoffset, int width_minus_one, int height_minus_one,
+     int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
+@@ -275,6 +278,21 @@ struct XE_2D_U16x1x16_LD_N {
+     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
+ #endif
+   }
++
++  struct PREFETCH {
++    CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
++                                      int height, int pitch,
++                                      intel::coord_t coord) {
++#if defined(SYCL_INTEL_TARGET)
++      __builtin_IB_subgroup_block_read_prefetch_u16_m1k16v1(
++          (intptr_t)baseoffset, width - 1, height - 1, pitch - 1, coord,
++          CacheControl::kL1C_L3C);
++#else
++      CUTE_INVALID_CONTROL_PATH(
++          "Trying to use block prefetch on non-PVC hardware");
++#endif
++    }
++  };
+ };
+ 
+ struct XE_2D_U16x2x16_LD_N {
+diff --git a/include/cute/atom/copy_traits_xe.hpp b/include/cute/atom/copy_traits_xe.hpp
+index 0dc4b503..d4cd3df1 100644
+--- a/include/cute/atom/copy_traits_xe.hpp
++++ b/include/cute/atom/copy_traits_xe.hpp
+@@ -96,27 +96,43 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
+                                              Shape<Int<SubgroupSize>, _1>,
+                                              Shape<_1, Int<SubgroupSize>>>;
+ 
+-  constexpr int tile_contig_size = is_need_reversed ? size<0>(TileShape{}) : size<1>(TileShape{});
+-  constexpr int tile_non_contig_size = is_need_reversed ? size<1>(TileShape{}) : size<0>(TileShape{});
++  constexpr int tile_contig_size = is_need_reversed ? size<0>(TileShape{}) : size<1>(TileShape{});  //128
++  constexpr int tile_non_contig_size = is_need_reversed ? size<1>(TileShape{}) : size<0>(TileShape{}); //16
+ 
+   // block here is what is prefetched in one atom execution
+   // min(32,32)-> 32 (256, 32) -> 32
+-  static constexpr auto block_contig_size = cute::min(tile_contig_size, cacheline_bytes / sizeof(dtype));
++  static constexpr auto block_contig_size = cute::min(tile_contig_size, cacheline_bytes * 8 / sizeof_bits_v<dtype>); // 64   //128
+   // A: 1 -> trans or B 256/32 = 8
+-  static constexpr auto nums_blocks_contig = ceil_div(tile_contig_size, block_contig_size);
++  static constexpr auto nums_blocks_contig = ceil_div(tile_contig_size, block_contig_size);  //2   //1
+   
+   // layout of sub groups
+   // A shape<32,1> / trans or B shape<4,8>
+-  constexpr int sgs_contig = cute::gcd(Num_SGs, nums_blocks_contig);
+-  constexpr int sgs_non_contig = Num_SGs / sgs_contig;
++  constexpr int sgs_contig = cute::gcd(Num_SGs, nums_blocks_contig);  //2   //1
++  constexpr int sgs_non_contig = Num_SGs / sgs_contig;   //16    //32
+ 
+-  constexpr auto block_non_contig_size = tile_non_contig_size / sgs_non_contig;
++  constexpr auto block_non_contig_size = cute::max(1, tile_non_contig_size / sgs_non_contig);
++
++  constexpr auto sgs_contig_amend = tile_non_contig_size / block_non_contig_size;
++  constexpr auto sgs_non_contig_amend = Num_SGs / sgs_contig_amend;
++  constexpr auto block_contig_size_amend = (tile_contig_size / sgs_non_contig_amend);// / sizeof_bits_v<dtype>;
++
++
++  #define PRINT(x) print(#x ": "); print(x); print("\n");
++  // if (cutlass::thread(32, 0)) {
++  //     print("======================= A: \n");
++  //     PRINT(tile_contig_size);
++  //     PRINT(tile_non_contig_size);
++  //     PRINT(nums_blocks_contig);
++  //     PRINT(sgs_contig_amend);
++  //     PRINT(sgs_non_contig_amend);
++  //     PRINT(block_contig_size_amend);
++  // }
+ 
+   using PrefetchTilingLayout = std::conditional_t<is_need_reversed,
+-           Layout<Shape<Shape<Int<SubgroupSize >, Int<sgs_contig>>, Int<sgs_non_contig>>,
+-                  Stride<Stride<_1, Int<SubgroupSize >>,            Int<SubgroupSize  * sgs_contig>>>,
+-    Layout<Shape<Int<sgs_non_contig>, Shape<Int<SubgroupSize >, Int<sgs_contig>>>,
+-           Stride<Int<SubgroupSize * sgs_contig>,  Stride<_1, Int<SubgroupSize>>>>
++           Layout<Shape<Shape<Int<SubgroupSize >, Int<sgs_contig_amend>>, Int<sgs_non_contig_amend>>,
++                  Stride<Stride<_1, Int<SubgroupSize >>,            Int<SubgroupSize  * sgs_contig_amend>>>,
++    Layout<Shape<Int<sgs_non_contig_amend>, Shape<Int<SubgroupSize >, Int<sgs_contig_amend>>>,
++           Stride<Int<SubgroupSize * sgs_contig_amend>,  Stride<_1, Int<SubgroupSize>>>>
+   >;
+ 
+   #define RETURN_STATEMENT(NON_CONTIG, DTYPE_SIZE, CONTIG) \
+@@ -131,9 +147,18 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
+                            PrefetchTilingLayout{}, \
+                            PrefetchValLayout{});
+ 
++  #define RETURN_STATEMENT_4BITS(NON_CONTIG, DTYPE_SIZE, CONTIG) \
++    if constexpr (CONTIG == 32) { \
++      RETURN_STATEMENT(NON_CONTIG, DTYPE_SIZE, 32); \
++    } else if constexpr (CONTIG == 16) { \
++      RETURN_STATEMENT(NON_CONTIG, DTYPE_SIZE, 16); \
++    } else { \
++      static_assert(dependent_false<dtype> && "Invalid TileShape and dtype"); \
++    }
++
+   #define CHOOSE_PREFETCH_FOR_TYPE(NON_CONTIG) \
+     if constexpr (dtype_size_bits == 4){ \
+-      RETURN_STATEMENT(NON_CONTIG, 8, 32); \
++      RETURN_STATEMENT_4BITS(NON_CONTIG, 16, block_contig_size_amend / 4); \
+     } else if constexpr (dtype_size_bits == 8){ \
+       RETURN_STATEMENT(NON_CONTIG, 8, 64); \
+     } else if constexpr (dtype_size_bits == 16){ \
+@@ -296,8 +321,8 @@ struct XE_2D_LD_Unpack {
+     using dtype = typename Copy_Atom<Traits_LD_t, CA_Args...>::ValType;
+ 
+     static_assert(detail::has_prefetch<CopyOp>);
+-    static_assert(size(SLayout{}) * sizeof_bits_v<dtype> == size<1>(typename Traits_LD_t::SrcLayout{}),
+-                  "Src tensor size does not match copy atom for prefetch size");
++    // static_assert(size(SLayout{}) * sizeof_bits_v<dtype> == size<1>(typename Traits_LD_t::SrcLayout{}),
++    //               "Src tensor size does not match copy atom for prefetch size");
+ 
+     dtype *base_addr = (dtype *)atom.base_ptr;
+ 
+@@ -451,7 +476,7 @@ struct Copy_Traits_<XE_2D_U8x1x32_LD_N, args_t...>
+     : XE_2D_LD_Unpack<XE_2D_U8x1x32_LD_N, args_t...> {
+   using ThrID = Layout<_16>;
+   // Map from (src-thr,src-val) to bit
+-  using SrcLayout = Layout<Shape <_16,_8>,
++  using SrcLayout = Layout<Shape <_16,_16>,
+                            Stride< _0,_1>>;
+   // Map from (dst-thr,dst-val) to bit
+   using DstLayout = Layout<Shape <_16,_16>,
+diff --git a/include/cutlass/gemm/collective/xe_mma_mixed_input.hpp b/include/cutlass/gemm/collective/xe_mma_mixed_input.hpp
+index ae9c576c..e5239532 100644
+--- a/include/cutlass/gemm/collective/xe_mma_mixed_input.hpp
++++ b/include/cutlass/gemm/collective/xe_mma_mixed_input.hpp
+@@ -469,7 +469,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
+     }();
+ 
+   #define LOG_GROUP 0
+-  #define LOG_THREAD 0
++  #define LOG_THREAD 32
+   #define CUTLASS_ENABLE_DEBUG_PRINTS 0
+   #if CUTLASS_ENABLE_DEBUG_PRINTS
+   #define PRINT(x) print(#x ": "); print(x); print("\n");
+@@ -501,19 +501,28 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
+   #endif
+ 
+     const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
+-    int prefetch_k = 0;
++    int prefetch_k_a = 0;
++    int prefetch_k_b = 0;
++
++    // barrier_arrive(2);
++
++    CUTLASS_PRAGMA_UNROLL
++    for (int i = 0; i < 2; i++, prefetch_k_a++) {
++      prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k_a));
++    }
+ 
+     CUTLASS_PRAGMA_UNROLL
+-    for (int i = 0; i < DispatchPolicy::Stages; i++, prefetch_k++) {
+-      prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
+-      prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
++    for (int i = 0; i < 2; i++, prefetch_k_b++) {
++      prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k_b));
+     }
+ 
+     const int k_reload_factor = mainloop.group_size / BLK_K; 
+ 
+     CUTLASS_PRAGMA_UNROLL
+-    for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
++    for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k_a, ++prefetch_k_b) {
+       // Copy gmem to rmem for the first k_tile
++      barrier_arrive(2);
++
+       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
+       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
+ 
+@@ -525,10 +534,13 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
+         copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
+       }
+ #endif
+-      if(prefetch_k < k_tile_count) {
+-        prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
+-        prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
+-      }
++      // if(prefetch_k < k_tile_count) {
++        prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k_a));
++        prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k_b));
++      // }
++
++      barrier_wait(2);
++
+ 
+       transform_quant(quant_frag, mma_B, fragment_scale_input,
+                       fragment_zero_input);
