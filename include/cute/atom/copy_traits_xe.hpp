@@ -101,7 +101,7 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
 
   // block here is what is prefetched in one atom execution
   // min(32,32)-> 32 (256, 32) -> 32
-  static constexpr auto block_contig_size = cute::min(tile_contig_size, cacheline_bytes / sizeof(dtype));
+  static constexpr auto block_contig_size = cute::min(tile_contig_size, cacheline_bytes * 8 / sizeof_bits_v<dtype>);
   // A: 1 -> trans or B 256/32 = 8
   static constexpr auto nums_blocks_contig = ceil_div(tile_contig_size, block_contig_size);
   
@@ -133,7 +133,7 @@ CUTE_HOST_DEVICE auto prefetch_selector(Tensor const& tensor) {
 
   #define CHOOSE_PREFETCH_FOR_TYPE(NON_CONTIG) \
     if constexpr (dtype_size_bits == 4){ \
-      RETURN_STATEMENT(NON_CONTIG, 8, 32); \
+      RETURN_STATEMENT(NON_CONTIG, 16, 32); \
     } else if constexpr (dtype_size_bits == 8){ \
       RETURN_STATEMENT(NON_CONTIG, 8, 64); \
     } else if constexpr (dtype_size_bits == 16){ \

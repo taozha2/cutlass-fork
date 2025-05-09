@@ -328,25 +328,46 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     using format_type = uint8_t;
     static constexpr auto src_bits = sizeof_bits_v<SrcType>;
     static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
-    auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
     static constexpr auto loop_cnt = decltype(size(out))::value / scalar;
     static constexpr auto v_cnt = decltype(size(out))::value / scalar / loop_cnt;
 
     using namespace cutlass::platform;
 
-    auto&& dst_ptr = *(vector_t<ushort, decltype(size(out))::value>*)(out.data());
+    auto* src = (format_type*)(raw_pointer_cast(in.data()));
+    auto* dst = raw_pointer_cast(tCrA_mma.data());
+
+    // auto& src = *(vector_t<format_type, decltype(size(out))::value/ scalar>*)(raw_pointer_cast(in.data()));
+    // auto& dst = *(vector_t<_Float16, decltype(size(out))::value>*)(out.data());
+
     #pragma unroll
     for (int v = 0; v < v_cnt; v++) {
       #pragma unroll
       for (int j = 0; j < scalar; j++) {
         #pragma unroll
         for (int i = 0; i < loop_cnt; i++) {
-          dst_ptr[v * loop_cnt * scalar + j * loop_cnt + i] = bit_cast<ushort>(static_cast<_Float16>((uint32_t)/*(static_cast<SrcType>*/(
-            (src_ptr[v * loop_cnt + i] >> (src_bits * j)) & 0xf)));
+          dst[v * loop_cnt * scalar + j * loop_cnt + i] = (static_cast<_Float16>(/*(static_cast<SrcType>*/(
+            (src[v * loop_cnt + i] >> (src_bits * j)) & 0xf)));
         }
       }
     }
 
+#if 1
+    CUTLASS_PRAGMA_UNROLL
+    for (int i = 0; i < N; ++i) {
+      auto ts = tCrS_input(i);
+      auto tz = tCrZ_input(i);
+      static constexpr auto size_dk = decltype(size(tCrA_mma))::value / N;
+
+      // auto* dst = raw_pointer_cast(tCrA_mma(_, i, _).data());
+      // auto& dst = *reinterpret_cast<cute::intel::vector_t<_Float16, size_dk>*>(raw_pointer_cast(tCrA_mma(_, i, _).data()));
+
+      CUTLASS_PRAGMA_UNROLL
+      for (int k = 0; k < size_dk; ++k) {
+        dst[i * size_dk + k] *= ts;
+        dst[i * size_dk + k] += tz;
+      }
+    }
+#else
     CUTLASS_PRAGMA_UNROLL
     for (int k = 0; k < K; ++k) {   // K == 1
       CUTLASS_PRAGMA_UNROLL
@@ -358,6 +379,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
         }
       }
     }
+#endif
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
