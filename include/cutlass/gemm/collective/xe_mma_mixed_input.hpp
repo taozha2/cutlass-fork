@@ -325,7 +325,6 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     static constexpr auto N = decltype(size<1>(in))::value;
     static constexpr auto K = decltype(size<2>(in))::value;
 
-#ifdef DATA_CONVERSION
     using format_type = uint8_t;
     static constexpr auto src_bits = sizeof_bits_v<SrcType>;
     static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
@@ -347,9 +346,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
         }
       }
     }
-#endif
 
-#ifdef QUANTIZATION
     CUTLASS_PRAGMA_UNROLL
     for (int k = 0; k < K; ++k) {   // K == 1
       CUTLASS_PRAGMA_UNROLL
@@ -361,7 +358,6 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
         }
       }
     }
-#endif
   }
 
   /// Perform a subgroup-scoped matrix multiply-accumulate
@@ -505,16 +501,20 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
     int prefetch_k = 0;
 
+#ifdef IPREFETCH
     CUTLASS_PRAGMA_UNROLL
     for (int i = 0; i < DispatchPolicy::Stages; i++, prefetch_k++) {
       prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
       prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
     }
+#endif
 
     const int k_reload_factor = mainloop.group_size / BLK_K; 
 
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
+            barrier_arrive(2);
+
       // Copy gmem to rmem for the first k_tile
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
@@ -527,15 +527,22 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
         copy(mainloop.tiled_copy_zero, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrZ);
       }
 #endif
+
+#ifdef IPREFETCH
       if(prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
       }
+#endif
 
+#ifdef QUANTIZATION
       transform_quant(quant_frag, mma_B, fragment_scale_input,
                       fragment_zero_input);
+#endif
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
+            barrier_wait(2);
+
     }
   }
 };

@@ -648,8 +648,8 @@ struct XE_2D_U4x16x64_LD_N {
                                     T *dst) {
 #if defined(SYCL_INTEL_TARGET)
     static_assert(sizeof(T) == 1, "Expected T to have size 1");
-    *reinterpret_cast<intel::ushort16 *>(dst) =
-        __builtin_IB_subgroup_block_read_flat_u8_m16k32v1(
+    *reinterpret_cast<intel::uchar32 *>(dst) =
+        __builtin_IB_subgroup_block_read_flat_u8_m16k16v2(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
 
 #if 0
