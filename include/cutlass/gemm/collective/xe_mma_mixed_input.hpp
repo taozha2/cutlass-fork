@@ -325,7 +325,8 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     static constexpr auto N = decltype(size<1>(in))::value;
     static constexpr auto K = decltype(size<2>(in))::value;
 
-    using format_type = ushort;
+#ifdef DATA_CONVERSION
+    using format_type = uint8_t;
     static constexpr auto src_bits = sizeof_bits_v<SrcType>;
     static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
     auto src_ptr = reinterpret_cast<const format_type*>(raw_pointer_cast(&(in.data()[0])));
@@ -346,6 +347,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
         }
       }
     }
+#endif
 
 #ifdef QUANTIZATION
     CUTLASS_PRAGMA_UNROLL
@@ -517,7 +519,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k), frag_copy_B);
 
-#if 0
+#ifdef QUANTIZATION
       if constexpr(ModeHasScales){
         copy(mainloop.tiled_copy_scale, copy_iter_s(_, _, _, k_start_idx + (k_tile / k_reload_factor)), copy_tCrS);
       }
