@@ -339,21 +339,31 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     static constexpr auto spilits = 2;
     auto tmp = make_tensor(tCrA_mma.data(), Shape<Int<loop_cnt / spilits>, Int<spilits>, Int<scalar>, Int<v_cnt>>{});
 
+#define ALGORITHM 0
+
 #ifdef DATA_CONVERT
     CUTLASS_PRAGMA_UNROLL
     for (int v = 0; v < v_cnt; v++) {
       CUTLASS_PRAGMA_UNROLL
       for (int j = 0; j < scalar; j++) {
+        const auto ts = tCrS_input(j);
+        const auto tz = tCrZ_input(j);
+
         CUTLASS_PRAGMA_UNROLL
         for (int s = 0; s < spilits; s++) {
-          // auto dst = tmp(_, s, j, v);
-          auto& dst = *(vector_t<_Float16, loop_cnt / spilits>*)(tmp(_, s, j, v).data());
+          auto dst = tmp(_, s, j, v);
+          // auto& dst = *(vector_t<_Float16, loop_cnt / spilits>*)(tmp(_, s, j, v).data());
 
           CUTLASS_PRAGMA_UNROLL
           for (int i = 0; i < (loop_cnt / spilits); i++) {
             auto idx = s * (loop_cnt / spilits) + i;
-            dst[i] = (static_cast<_Float16>(/*(static_cast<SrcType>*/(
-              (src[v * loop_cnt + idx] >> (src_bits * j)) & 0xf)));
+            dst[i] = static_cast<_Float16>(/*(static_cast<SrcType>*/((src[v * loop_cnt + idx] >> (src_bits * j)) & 0xf));
+#ifdef QUANTIZATION
+#if ALGORITHM == 0
+            dst[i] *= ts;
+            dst[i] += tz;
+#endif
+#endif
           }
         }
       }
@@ -361,6 +371,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
 #endif
 
 #ifdef QUANTIZATION
+#if ALGORITHM != 0
     static constexpr auto spilits1 = 1;
     static constexpr auto size_dk = decltype(size(tCrA_mma))::value / N;
     auto tmp1 = make_tensor(tCrA_mma.data(), Shape<Int<size_dk/spilits1>, Int<spilits1>, Int<N>>{});
@@ -380,6 +391,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
         }
       }
     }
+#endif
 #endif
   }
 
