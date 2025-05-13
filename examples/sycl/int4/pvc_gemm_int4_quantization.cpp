@@ -467,6 +467,8 @@ struct ExampleRunner {
     auto layout_B = make_layout(shape_B, stride_B);
     auto layout_scale_zero = make_layout(shape_scale_zero, stride_S);
 
+#ifdef QUANTIZATION
+
     // Note that we are overwriting the relevant `block_X_dq` here, both were
     // filled by initialize_mixed_dtype_block above
     if constexpr (AIsNarrower) {
@@ -477,7 +479,8 @@ struct ExampleRunner {
       cutlass::dequantize(block_B_dq.get(), block_B.get(), layout_B,
                         block_scale.get(), block_zero.get(), layout_scale_zero,
                         options.g);
-    } 
+    }
+#endif
   }
 
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
@@ -613,18 +616,18 @@ int main(int argc, const char** argv)
   using ElementScale = MmaType;
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
-  using GmemTiledCopyA = XE_2D_U4x16x64_LD_NN;
-  using GmemTiledCopyB = XE_2D_U16x32x16_LD_N;
+  using GmemTiledCopyA = XE_2D_U4x32x32_LD_NN;
+  using GmemTiledCopyB = XE_2D_U16x32x32_LD_N;
   static_assert(sizeof(ElementInputA) == 1, "ElementA width must match GmemTiledCopyA U8");
 
   // Workgroup-level tile
-  using TileShape = Shape<_256, _256, _16>;
+  using TileShape = Shape<_32, _128, _32>;
 
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
-                                    Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+                                    Layout<Shape<_1, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
-  constexpr int PipelineStages = 2;
+  constexpr int PipelineStages = 4;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCMixedPrecision<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 

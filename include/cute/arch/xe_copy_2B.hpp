@@ -435,7 +435,7 @@ struct XE_2D_U16x1x32_LD_N {
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
       intel_sub_group_2d_block_prefetch_16b_1r16x2c(
-          (__global void*)baseoffset, width - 1, height - 1, pitch - 1, coord);
+          (__global void*)baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -457,7 +457,7 @@ struct XE_2D_U16x1x32_LD_NN {
     auto ret =
         __builtin_IB_subgroup_block_read_flat_u16_m1k32v1(
             (intptr_t)(baseoffset), width - 1, height - 1, pitch - 1, coord);
-            std::memcpy((void*)dst, (void*)(&ret), sizeof(ret));
+    std::memcpy((void*)dst, (void*)(&ret), sizeof(ret));
 #else
     CUTE_INVALID_CONTROL_PATH("Trying to use block loads on non-PVC hardware");
 #endif
@@ -487,7 +487,7 @@ struct XE_2D_U16x2x32_LD_N {
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
       intel_sub_group_2d_block_prefetch_16b_2r16x2c(
-          (__global void*)baseoffset, width - 1, height - 1, pitch - 1, coord);
+          (__global void*)baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -519,7 +519,7 @@ struct XE_2D_U16x4x32_LD_N {
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
       intel_sub_group_2d_block_prefetch_16b_4r16x2c(
-          (__global void*)baseoffset, width - 1, height - 1, pitch - 1, coord);
+          (__global void*)baseoffset, width, height, pitch, coord);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
