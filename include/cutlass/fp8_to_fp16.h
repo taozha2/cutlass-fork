@@ -47,7 +47,7 @@ static inline ushort16 convert_ushort16(uchar16 x) {
     return result;
 }
 
-static inline ushort16 E4M3_to_FP16_vec16(uchar16 xin) {
+static inline ushort16 E4M3_to_FP16_vec16(uchar16& xin) {
     uchar16 xa = xin & 0x7F;
     uchar16 sgn_x = xin ^ xa;
 
