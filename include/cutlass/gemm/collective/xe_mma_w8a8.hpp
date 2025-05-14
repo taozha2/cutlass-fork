@@ -186,13 +186,15 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < num_elements / vec_size; ++i) {
           // vectorized load
-          cute::intel::uchar16 src_vec;
-          CUTLASS_PRAGMA_UNROLL
-          for (int j = 0; j < vec_size; ++j) {
-              src_vec[j] = src(j, i);
-          }
-          // vectorized convert fp8 -> fp16
-          cute::intel::ushort16 dst_vec = E4M3_to_FP16_vec16(src_vec);
+          // cute::intel::uchar16 src_vec;
+          // CUTLASS_PRAGMA_UNROLL
+          // for (int j = 0; j < vec_size; ++j) {
+          //     src_vec[j] = src(j, i);
+          // }
+          // // vectorized convert fp8 -> fp16
+          // cute::intel::ushort16 dst_vec = E4M3_to_FP16_vec16(src_vec);
+          auto src_vec = src(_, i);
+          cute::intel::ushort16 dst_vec = E4M3_to_FP16_vec16(*reinterpret_cast<cute::intel::uchar16*>(&src_vec));
           // vectorized store
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < vec_size; ++j) {
@@ -282,8 +284,8 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
       
       // TODO: register pressure
-      vanilla_E4M3_to_FP16(tCrA, tCrA_fp16);
-      vanilla_E4M3_to_FP16(tCrB, tCrB_fp16);
+      convert_E4M3_to_FP16(tCrA, tCrA_fp16);
+      convert_E4M3_to_FP16(tCrB, tCrB_fp16);
 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
