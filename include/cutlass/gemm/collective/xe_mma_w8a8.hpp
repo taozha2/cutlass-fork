@@ -214,7 +214,8 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
         Tensor<EngineOut, LayoutOut>& out) {
     // CUTLASS_PRAGMA_UNROLL
     for(int i = 0; i < size(out); i++) {
-      out[i] = static_cast<half_t>(float_e4m3_t::bitcast(in[i]));
+      // out[i] = static_cast<half_t>(float_e4m3_t::bitcast(in[i]));
+      out[i] = half_t((i %5) * 0.1f);
     }
   }
   // Perform a subgroup-scoped matrix multiply-accumulate
@@ -284,8 +285,8 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
       
       // TODO: register pressure
-      convert_E4M3_to_FP16(tCrA, tCrA_fp16);
-      convert_E4M3_to_FP16(tCrB, tCrB_fp16);
+      vanilla_E4M3_to_FP16(tCrA, tCrA_fp16);
+      vanilla_E4M3_to_FP16(tCrB, tCrB_fp16);
 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
