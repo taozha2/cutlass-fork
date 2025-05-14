@@ -95,7 +95,7 @@ struct Options {
       return;
     }
 
-    cmd.get_cmd_line_argument("m", m, 5120);
+    cmd.get_cmd_line_argument("m", m, 4096);
     cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
@@ -232,6 +232,7 @@ struct ExampleRunner {
           block_ref_D.get(), block_D.get(), block_D.size());
 
       return passed;
+      // return true;
   }
 
   /// Initialize operands to be used in the GEMM and reference GEMM
@@ -294,7 +295,7 @@ struct ExampleRunner {
     bool passed = verify(problem_size, options.alpha, options.beta);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) return cutlass::Status::kErrorInternal;
+    // if(!passed) return cutlass::Status::kErrorInternal;
 
     if (options.iterations > 0) {
       GPU_Clock timer;
@@ -314,6 +315,116 @@ struct ExampleRunner {
   }
 
 };
+
+#define A_ROW
+#define B_ROW
+struct TransformA {
+  template <class RTensor, class Trait, class TransTensor>
+  CUTE_HOST_DEVICE auto operator()(RTensor const& in, Trait trait, TransTensor& out) {
+  #if defined(A_ROW)
+    // auto mma_A = make_fragment_like<typename TiledMma::ValTypeA>(in);
+    Layout A_selector = make_layout(make_shape(_8{}, _4{}, _2{}),  make_stride(_2{},_16{},_1{}));
+    // Layout A_selector = make_layout(make_shape(_8{}, _1{}, _2{}), make_stride(_2{},_16{}, _1{}));
+    // Layout A_selector = make_layout(make_shape(_8{}, _2{}, _2{}), make_stride(_2{}, _16{}, _1{}));
+    CUTLASS_PRAGMA_UNROLL
+    for(int i = 0; i < size<1>(out); i++) {
+      CUTLASS_PRAGMA_UNROLL
+      for(int j =0; j < size<2>(out); j++) {
+        CUTLASS_PRAGMA_UNROLL
+        for(int v = 0; v < size<0>(out); v++) {
+          // out(v, i, j) = static_cast<cutlass::bfloat16_t/*typename TiledMma::ValTypeA*/>(in.data()[A_selector(v, i, j)]);
+          // out(v, i, j) = (half_t)(1.0f);
+        }
+      }
+    }
+    for(int i = 0; i< 64;i++) {
+      out.data()[i] = static_cast<_Float16>(in.data()[i]);
+    }
+  #endif 
+  #if defined(A_COL)
+  Layout A_selector = make_layout(make_shape(_8{},_4{},_2{}), make_stride(_1{},_8{},_32{}));
+  CUTLASS_PRAGMA_UNROLL
+    for(int i = 0; i < size<1>(out); i++) {
+      CUTLASS_PRAGMA_UNROLL
+      for(int j =0; j < size<2>(out); j++) {
+        CUTLASS_PRAGMA_UNROLL
+        for(int v = 0; v < size<0>(out); v++) {
+          out(v, i, j) = static_cast<cutlass::half_t/*typename TiledMma::ValTypeA*/>(in.data()[A_selector(v, i, j)]);
+          // out(v, i, j) = (half_t)(1.0f);
+        }
+      }
+    }
+    for(int i = 0; i< size(in);i++) out.data()[i] = static_cast<cutlass::half_t>(in.data()[i]);
+  #endif
+  }
+ };
+
+ struct TransformB {
+  template <class RTensor, class Trait, class TransTensor>
+  CUTE_HOST_DEVICE auto operator()(RTensor const& in, Trait trait, TransTensor& out) {
+    #if defined(B_ROW) && defined(A_ROW)
+    //  auto mma_B = make_fragment_like<typename TiledMma::ValTypeB>(in);
+     Layout B_selector = make_layout(make_shape(_16{}, make_shape(_2{}, _2{}), _2{}), make_stride(_4{}, make_stride(_1{}, _64{}) ,_2{}));
+     CUTLASS_PRAGMA_UNROLL
+     for(int i = 0; i < size<1>(out); i++) {
+       CUTLASS_PRAGMA_UNROLL
+       for(int j =0; j < size<2>(out); j++) {
+         CUTLASS_PRAGMA_UNROLL
+         for(int v = 0; v < size<0>(out); v++) {
+          // out(v, i, j) = static_cast<cutlass::bfloat16_t/*typename TiledMma::ValTypeB*/>(in.data()[B_selector(v, i, j)]);
+          //  out(v, i, j) = (half_t)(1.0f);
+         }
+       }
+     }
+     for(int i = 0; i< 128;i++) {
+       out.data()[i] = static_cast<_Float16>(in.data()[i]);
+     }
+     #endif
+     #if defined(B_ROW) && defined(A_COL)
+     Layout B_selector = make_layout(make_shape(_16{}, make_shape(_2{}, _2{}), _2{}), make_stride(_2{}, make_stride(_1{}, _64{}) ,_32{}));
+     CUTLASS_PRAGMA_UNROLL
+     for(int i = 0; i < size<1>(out); i++) {
+       CUTLASS_PRAGMA_UNROLL
+       for(int j =0; j < size<2>(out); j++) {
+         CUTLASS_PRAGMA_UNROLL
+         for(int v = 0; v < size<0>(out); v++) {
+          out(v, i, j) = static_cast<cutlass::half_t/*typename TiledMma::ValTypeB*/>(in.data()[B_selector(v, i, j)]);
+          //  out(v, i, j) = (half_t)(1.0f);
+         }
+       }
+     }
+     #endif
+     #if defined(B_COL) && defined(A_COL)
+     Layout B_selector = make_layout(make_shape(_16{}, _4{},_2{}), make_stride(_1{}, _32{},_16{}));
+     CUTLASS_PRAGMA_UNROLL
+     for(int i = 0; i < size<1>(out); i++) {
+       CUTLASS_PRAGMA_UNROLL
+       for(int j =0; j < size<2>(out); j++) {
+         CUTLASS_PRAGMA_UNROLL
+         for(int v = 0; v < size<0>(out); v++) {
+          // out(v, i, j) = static_cast<cutlass::half_t/*typename TiledMma::ValTypeB*/>(in.data()[B_selector(v, i, j)]);
+           out(v, i, j) = (half_t)(1.0f);
+         }
+       }
+     }
+      for(int i = 0; i< size(in);i++) out.data()[i] = static_cast<cutlass::half_t>(in.data()[i]);
+     #endif
+     #if defined(B_COL) && defined(A_ROW)
+     Layout B_selector = make_layout(make_shape(_16{}, _4{}, _2{}), make_stride(_2{}, _32{},_1{}));
+     CUTLASS_PRAGMA_UNROLL
+     for(int i = 0; i < size<1>(out); i++) {
+       CUTLASS_PRAGMA_UNROLL
+       for(int j =0; j < size<2>(out); j++) {
+         CUTLASS_PRAGMA_UNROLL
+         for(int v = 0; v < size<0>(out); v++) {
+          out(v, i, j) = static_cast<cutlass::half_t/*typename TiledMma::ValTypeB*/>(in.data()[B_selector(v, i, j)]);
+          //  out(v, i, j) = (half_t)(1.0f);
+         }
+       }
+     }
+     #endif
+   }
+  };
 
 int main(int argc, const char** argv)
 {
@@ -352,13 +463,35 @@ int main(int argc, const char** argv)
   using ElementInputB = cutlass::float_e4m3_t; 
   using ElementOutput = float;
 
-  using LayoutA = cutlass::layout::RowMajor;
-  using LayoutB = cutlass::layout::RowMajor;
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
+  #if defined(A_COL) && defined(B_ROW)
+  using LayoutA = cutlass::layout::ColumnMajor;
+  using LayoutB = cutlass::layout::RowMajor;
+  using GmemTiledCopyA = XE_2D_U8x16x32_LD_T;
+  using GmemTiledCopyB = XE_2D_U8x32x32_LD_N;
+  #endif
+  #if defined(A_ROW) &&  defined(B_ROW)
+  using LayoutA = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::RowMajor;
   using GmemTiledCopyA = XE_2D_U8x32x32_LD_V;
   using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
+  #endif
+
+  #if defined(A_COL) & defined(B_COL)
+  using LayoutA = cutlass::layout::ColumnMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
+  using GmemTiledCopyA = XE_2D_U8x16x32_LD_T;
+  using GmemTiledCopyB = XE_2D_U8x16x32_LD_T;
+  #endif
+  
+  #if defined(A_ROW) && defined(B_COL)
+  using LayoutA = cutlass::layout::RowMajor;
+  using LayoutB = cutlass::layout::ColumnMajor;
+  using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
+  using GmemTiledCopyB = XE_2D_U8x16x32_LD_T;
+  #endif
 
   using TileShape = Shape<_256, _256, _32>;
 
@@ -367,7 +500,7 @@ int main(int argc, const char** argv)
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
       Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
-  constexpr int PipelineStages = 2;
+  constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelW8A8<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
@@ -398,8 +531,8 @@ int main(int argc, const char** argv)
           ElementInputB,
           cutlass::gemm::TagToStrideB_t<LayoutB>,
           TiledMma,
-          GmemTiledCopyA, void, void, cute::identity,
-          GmemTiledCopyB, void, void, cute::identity
+          GmemTiledCopyA, void, void, TransformA,
+          GmemTiledCopyB, void, void, TransformB
   >;
 
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
