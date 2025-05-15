@@ -214,8 +214,7 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
         Tensor<EngineOut, LayoutOut>& out) {
     // CUTLASS_PRAGMA_UNROLL
     for(int i = 0; i < size(out); i++) {
-      // out[i] = static_cast<half_t>(float_e4m3_t::bitcast(in[i]));
-      out[i] = half_t((i %5) * 0.1f);
+      out[i] = static_cast<half_t>(float_e4m3_t::bitcast(in[i]));
     }
   }
   // Perform a subgroup-scoped matrix multiply-accumulate
