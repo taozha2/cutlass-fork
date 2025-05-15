@@ -105,7 +105,6 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
 #else
       block_host[i * 4096 + j ] = static_cast<T1>(dist(rng));
 #endif
-
       block_host_dq[i * 4096 + j ] = static_cast<T2>((short)(block_host[i * 4096 + j ].get()));
     }
   }

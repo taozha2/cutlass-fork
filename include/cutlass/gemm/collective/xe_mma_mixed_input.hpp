@@ -325,47 +325,55 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
     static constexpr auto N = decltype(size<1>(in))::value;
     static constexpr auto K = decltype(size<2>(in))::value;
 
-    using format_type = uint8_t;
+    using format_type = ushort;
     static constexpr auto src_bits = sizeof_bits_v<SrcType>;
     static constexpr auto scalar = sizeof_bits_v<format_type> / src_bits;
-    static constexpr auto loop_cnt = decltype(size(out))::value / scalar;
-    static constexpr auto v_cnt = decltype(size(out))::value / scalar / loop_cnt;
+    static constexpr auto loop_cnt = decltype(size(out))::value / N;
+
+    static_assert((scalar % N) == 0);
 
     using namespace cutlass::platform;
 
     auto* src = (format_type*)(raw_pointer_cast(in.data()));
     auto* dst = raw_pointer_cast(tCrA_mma.data());
 
-    static constexpr auto spilits = 2;
-    auto tmp = make_tensor(tCrA_mma.data(), Shape<Int<loop_cnt / spilits>, Int<spilits>, Int<scalar>, Int<v_cnt>>{});
+    // for tuning performance
+    static constexpr auto spilits = 4;
+
+    static constexpr auto vec_size = loop_cnt / spilits;
+
+    auto d_tensor = make_tensor(tCrA_mma.data(), Shape<Int<vec_size>, Int<spilits>, Int<N>>{});
 
 #define ALGORITHM 0
 
 #ifdef DATA_CONVERT
     CUTLASS_PRAGMA_UNROLL
-    for (int v = 0; v < v_cnt; v++) {
-      CUTLASS_PRAGMA_UNROLL
-      for (int j = 0; j < scalar; j++) {
-        const auto ts = tCrS_input(j);
-        const auto tz = tCrZ_input(j);
+    for (int j = 0; j < N; j++) {
+      const auto ts = tCrS_input(j);
+      const auto tz = tCrZ_input(j);
 
-        CUTLASS_PRAGMA_UNROLL
-        for (int s = 0; s < spilits; s++) {
-          // auto dst = tmp(_, s, j, v);
-          auto& dst = *(vector_t<_Float16, loop_cnt / spilits>*)(tmp(_, s, j, v).data());
+      CUTLASS_PRAGMA_UNROLL
+      for (int s = 0; s < spilits; s++) {
+        // auto dst = d_tensor(_, _, s, j);
+        auto& dst = *(vector_t<_Float16, vec_size>*)(d_tensor(_, s, j).data());
+
 
           CUTLASS_PRAGMA_UNROLL
-          for (int i = 0; i < (loop_cnt / spilits); i++) {
-            auto idx = s * (loop_cnt / spilits) + i;
-            dst[i] = static_cast<_Float16>(/*(static_cast<SrcType>*/((src[v * loop_cnt + idx] >> (src_bits * j)) & 0xf));
-#ifdef QUANTIZATION
-#if ALGORITHM == 0
-            dst[i] *= ts;
-            dst[i] += tz;
-#endif
-#endif
+          for (int i = 0; i < vec_size; i++) {
+            auto dst_idx = i;
+            auto offset = (s * vec_size + dst_idx) * N + j;
+            auto idx = offset / scalar;
+            auto shift = offset % scalar;
+
+            dst[dst_idx] = static_cast<_Float16>(/*(static_cast<SrcType>*/(src[idx] >> (src_bits * shift)) & 0xf);
+  #ifdef QUANTIZATION
+  #if ALGORITHM == 0
+            dst[dst_idx] *= ts;
+            dst[dst_idx] += tz;
+  #endif
+  #endif
           }
-        }
+        // }
       }
     }
 #endif
