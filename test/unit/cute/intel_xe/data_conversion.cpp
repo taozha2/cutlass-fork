@@ -61,6 +61,7 @@ void convert_kernel(TensorS S, TensorD D, TiledLoad load,
 
   // ==========  convert ==========
   // vanilla conversion
+//   #pragma unroll 16
 //   for(size_t i = 0; i < size(fragment); i++) {
 //     fragment_out[i] = static_cast<half_t>(float_e4m3_t::bitcast(fragment[i]));
 //   }
