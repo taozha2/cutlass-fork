@@ -77,6 +77,14 @@ __global__ void
       return;
     }
   }
+  // if(cute::thread0()){
+  //   for(int i = 0; i < 32; i++) {
+  //     for(int j = 0; j < 64; j++) {
+  //       print((int)ptr_A[i* 4096+j]);print(" ");
+  //     }
+  //     print("\n");
+  //   }
+  // }
 }
 
 template <typename Element>

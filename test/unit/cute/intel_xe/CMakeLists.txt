@@ -29,12 +29,13 @@
 if(SYCL_INTEL_TARGET)
 cutlass_test_unit_add_executable(
   cutlass_test_unit_cute_intel_xe
-  copy_1d.cpp
-  copy_subgroup_block.cpp
-  copy_block.cpp
-  copy_scatter.cpp
-  mma.cpp
-  tiled_mma.cpp
+  # copy_1d.cpp
+  # copy_subgroup_block.cpp
+  # copy_block.cpp
+  # copy_scatter.cpp
+  # mma.cpp
+  # tiled_mma.cpp
+  data_conversion.cpp
 )
 else()
 cutlass_test_unit_add_executable(

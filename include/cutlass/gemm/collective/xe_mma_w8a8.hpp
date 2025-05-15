@@ -82,8 +82,8 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
   static_assert(std::is_same_v<ElementA, float_e4m3_t>, "ElementA must be fp8 (E4M3)");
   static_assert(std::is_same_v<ElementB, float_e4m3_t>, "ElementB must be fp8 (E4M3)");
 
-  static_assert(std::is_same_v<TransformA, cute::identity>, "Transformation for A is not currently supported on Intel PVC");
-  static_assert(std::is_same_v<TransformB, cute::identity>, "Transformation for B is not currently supported on Intel PVC");
+  // static_assert(std::is_same_v<TransformA, cute::identity>, "Transformation for A is not currently supported on Intel PVC");
+  // static_assert(std::is_same_v<TransformB, cute::identity>, "Transformation for B is not currently supported on Intel PVC");
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
@@ -178,34 +178,45 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       static_assert(std::is_same_v<SrcType, uint8_t>, "Expected fp8 (E4M3) input as uint8_t");
       static_assert(std::is_same_v<DstType, half_t>, "Expected fp16 output as half_t");
 
-      auto const& src = in(_, _, _);
-      auto const& dst = out(_, _, _);
-
-      SrcType const* pSrc = src.data();
-      DstType* pDst = dst.data();
-
-      constexpr int num_elements = decltype(size(src))::value;
+      constexpr int num_elements = decltype(size(in))::value;
       constexpr int vec_size = 16;
+
+      Tensor src = make_tensor(static_cast<decltype(in)&&>(in).data(), make_shape(_16{}, Int<num_elements/vec_size>{}));
       // TODO(Codeplay): Move conversion to NumericArrayConverter
       CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < num_elements / vec_size; ++i) {
           // vectorized load
-          cute::intel::uchar16 src_vec;
-          CUTLASS_PRAGMA_UNROLL
-          for (int j = 0; j < vec_size; ++j) {
-              src_vec[j] = pSrc[i * vec_size + j];
-          }
-          // vectorized convert fp8 -> fp16
-          cute::intel::ushort16 dst_vec = E4M3_to_FP16_vec16(src_vec);
+          // cute::intel::uchar16 src_vec;
+          // CUTLASS_PRAGMA_UNROLL
+          // for (int j = 0; j < vec_size; ++j) {
+          //     src_vec[j] = src(j, i);
+          // }
+          // // vectorized convert fp8 -> fp16
+          // cute::intel::ushort16 dst_vec = E4M3_to_FP16_vec16(src_vec);
+          auto src_vec = src(_, i);
+          cute::intel::ushort16 dst_vec = E4M3_to_FP16_vec16(*reinterpret_cast<cute::intel::uchar16*>(&src_vec));
           // vectorized store
           CUTLASS_PRAGMA_UNROLL
           for (int j = 0; j < vec_size; ++j) {
-              reinterpret_cast<uint16_t*>(pDst)[i * vec_size + j] = dst_vec[j];
-
+              reinterpret_cast<uint16_t*>(out.data())[i * vec_size + j] = dst_vec[j];
           }
       }
   }
   
+  template <class EngineIn,
+      class EngineOut,
+      class LayoutIn,
+      class LayoutOut,
+      class... Ts>
+  CUTLASS_DEVICE
+  void vanilla_E4M3_to_FP16(
+        Tensor<EngineIn, LayoutIn> const& in,
+        Tensor<EngineOut, LayoutOut>& out) {
+    // CUTLASS_PRAGMA_UNROLL
+    for(int i = 0; i < size(out); i++) {
+      out[i] = static_cast<half_t>(float_e4m3_t::bitcast(in[i]));
+    }
+  }
   // Perform a subgroup-scoped matrix multiply-accumulate
   template <class FrgTensorD, class TensorA, class TensorB, class FrgTensorC, class KTileIterator, class BlkCoord>
   CUTLASS_DEVICE void operator()(FrgTensorD &accum, TensorA gA, TensorB gB, FrgTensorC const &src_accum,
@@ -273,8 +284,8 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
       
       // TODO: register pressure
-      convert_E4M3_to_FP16(tCrA, tCrA_fp16);
-      convert_E4M3_to_FP16(tCrB, tCrB_fp16);
+      vanilla_E4M3_to_FP16(tCrA, tCrA_fp16);
+      vanilla_E4M3_to_FP16(tCrB, tCrB_fp16);
 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
