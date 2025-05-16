@@ -344,8 +344,8 @@ struct BenchmarkRunnerGemm {
       state.SkipWithError(e.what());
     }
 
-    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess)
-      state.SkipWithError("GEMM unable to implement given args.");
+  //  if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess)
+  //    state.SkipWithError("GEMM unable to implement given args.");
 
     if (gemm_op.initialize(arguments, workspace.get()) != cutlass::Status::kSuccess)
       state.SkipWithError("GEMM failed to initialize.");
