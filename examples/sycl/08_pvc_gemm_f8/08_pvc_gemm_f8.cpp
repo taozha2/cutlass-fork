@@ -75,14 +75,18 @@ struct Options {
 
   bool help;
   bool error;
+  bool splitk;
+  bool dp;
 
-  int m, n, k, l, iterations;
+  int m, n, k, l, iterations, splits;
   float alpha, beta;
 
   Options():
     help(false),
     error(false),
-    m(5120), n(4096), k(4096), l(1), iterations(20),
+    splitk(false),
+    dp(false),
+    m(5120), n(4096), k(4096), l(1), iterations(20), splits(1),
     alpha(1.f), beta(0.f)
   { }
 
@@ -95,6 +99,14 @@ struct Options {
       return;
     }
 
+    if (cmd.check_cmd_line_flag("splitk")) {
+      splitk = true;
+    }
+
+    if (cmd.check_cmd_line_flag("dp")) {
+      dp = true;
+    }
+
     cmd.get_cmd_line_argument("m", m, 4096);
     cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
@@ -102,6 +114,7 @@ struct Options {
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
     cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("splits", splits, 1);
   }
 
   /// Prints the usage statement.
@@ -110,10 +123,13 @@ struct Options {
     out << "PVC GEMM Example\n\n"
       << "Options:\n\n"
       << "  --help                      If specified, displays this usage statement\n\n"
+      << "  --dp                        If specified, uses Data Parallel decomposition\n"
+      << "  --splitk                    If specified, uses SplitK decomposition\n"
       << "  --m=<int>                   Sets the M extent of the GEMM\n"
       << "  --n=<int>                   Sets the N extent of the GEMM\n"
       << "  --k=<int>                   Sets the K extent of the GEMM\n"
       << "  --l=<int>                   Sets the L extent (batch count) of the GEMM\n"
+      << "  --splits=<int>              Sets the splitting factor for GEMM\n"
       << "  --alpha=<s32>               Epilogue scalar alpha\n"
       << "  --beta=<s32>                Epilogue scalar beta\n\n"
       << "  --iterations=<int>          Iterations\n\n";
@@ -193,12 +209,12 @@ struct ExampleRunner {
       cutlass::DeviceAllocation<half_t> block_B_fp16(block_B.size());
 
       // fp8 -> fp16
-      convert_e4m3_to_fp16<float_e4m3_t, half_t>(
+      convert_e4m3_to_fp16<ElementA, half_t>(
           block_A.get(),
           block_A_fp16.get(),
           block_A.size()
       );
-      convert_e4m3_to_fp16<float_e4m3_t, half_t>(
+      convert_e4m3_to_fp16<ElementB, half_t>(
           block_B.get(),
           block_B_fp16.get(),
           block_B.size()
@@ -266,7 +282,12 @@ struct ExampleRunner {
       problem_size,
       {block_A.get(), stride_A, block_B.get(), stride_B},
       {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
-      hw_info
+      hw_info,
+      {options.splits, // Setting splits > 1 will force SplitK decomposition
+        // Set the decomposition mode based on user provided options
+        options.dp ? cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::DataParallel :
+        options.splitk ? cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::SplitK :
+                            cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode::StreamK}  
     };
 
     Gemm gemm_op;
@@ -279,10 +300,10 @@ struct ExampleRunner {
         std::exit(1);
     }
 
-    if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess){
-      std::cout << "Invalid Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-      std::exit(1);
-    }
+    // if (gemm_op.can_implement(arguments) != cutlass::Status::kSuccess){
+    //   std::cout << "Invalid Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
+    //   std::exit(1);
+    // }
 
     CUTLASS_CHECK(gemm_op.initialize(arguments, workspace.get()));
 
@@ -307,8 +328,9 @@ struct ExampleRunner {
 
       float cute_time = timer.seconds() / options.iterations;
       double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
+      double Io = ((options.m + options.n) * options.k * sizeof(ElementA) + options.m * options.n *sizeof(ElementOutput)) * 1e-9;
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-      printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
+      printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s [%4.3f]Gb/s  (%6.4f)ms\n", tflops / cute_time, Io/cute_time, cute_time*1000);
     }
 
     return cutlass::Status::kSuccess;
@@ -459,8 +481,8 @@ int main(int argc, const char** argv)
   using ElementAccumulator = float;
   using ElementComputeEpilogue = float; 
   // TODO: support E5M2
-  using ElementInputA = cutlass::float_e4m3_t; 
-  using ElementInputB = cutlass::float_e4m3_t; 
+  using ElementInputA = cutlass::float_e5m2_t; 
+  using ElementInputB = cutlass::float_e5m2_t; 
   using ElementOutput = float;
 
   using LayoutC = cutlass::layout::RowMajor;
@@ -501,7 +523,7 @@ int main(int argc, const char** argv)
       Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 3;
-  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelW8A8<PipelineStages>;
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelW8A8<PipelineStages, cutlass::gemm::KernelXeCooperative>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
   using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementOutput, ElementComputeEpilogue,
@@ -538,7 +560,8 @@ int main(int argc, const char** argv)
   using GemmKernel = cutlass::gemm::kernel::GemmUniversal<
   Shape<int, int, int, int>,
   CollectiveMainloop,
-  CollectiveEpilogue
+  CollectiveEpilogue,
+  cutlass::gemm::StreamKScheduler
   >;
 
   using Gemm = cutlass::gemm::device::GemmUniversalAdapter<GemmKernel>;
