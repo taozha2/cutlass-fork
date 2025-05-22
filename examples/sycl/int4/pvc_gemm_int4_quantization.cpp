@@ -79,7 +79,7 @@ enum GemmMode {
 };
 
 using MmaType = _Float16;
-using QuantType = _BitInt(4);
+using QuantType = uint4_t;//_BitInt(4);
 
 // Command line options parsing
 struct Options {
@@ -480,6 +480,7 @@ struct ExampleRunner {
                         block_scale.get(), block_zero.get(), layout_scale_zero,
                         options.g);
     }
+
 #endif
   }
 
@@ -612,7 +613,7 @@ int main(int argc, const char** argv)
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using ElementZero = MmaType;
+  using ElementZero = int4_t;
   using ElementScale = MmaType;
 
   // Note: XE_2D_U18x32x32_LD_N is incompatible with our bf16 MMA atoms
@@ -652,49 +653,13 @@ int main(int argc, const char** argv)
   // Use the helpers to avoid template arg repetition
   using GemmAdapterBuilder = helpers::MixedGemmUniversalAdapterBuilder<Shape<int, int, int, int>, CollectiveEpilogue>;
 
-  using MixedBuilderQuantA =
-      helpers::MixedCollectiveMmaBuilder<GEMMDispatchPolicy, TileShape,
-                                cutlass::gemm::TagToStrideA_t<LayoutA>,
-                                cutlass::gemm::TagToStrideB_t<LayoutB>,
-                                TiledMma, GmemTiledCopyA, GmemTiledCopyB>;
-
   using MixedBuilderQuantB =
       helpers::MixedCollectiveMmaBuilder<GEMMDispatchPolicy, TileShape,
                                 cutlass::gemm::TagToStrideA_t<LayoutA>,
                                 cutlass::gemm::TagToStrideB_t<LayoutB>,
                                 TiledMma, GmemTiledCopyB, GmemTiledCopyA>;
 
-  // A-narrow Mainloop & GemmUniversalAdapter
-  using MainloopAConvertOnly =
-      MixedBuilderQuantA::CollectiveMma<cute::tuple<ElementInputA>,
-                                        ElementInputB>;
-  using GemmAConvertOnly =
-      GemmAdapterBuilder::GemmUniversalAdapter<MainloopAConvertOnly>;
-
-  using MainloopAConvertAndScale = MixedBuilderQuantA::CollectiveMma<
-      cute::tuple<ElementInputA, ElementScale>, ElementInputB>;
-  using GemmAConvertAndScale =
-      GemmAdapterBuilder::GemmUniversalAdapter<MainloopAConvertAndScale>;
-
-  using MainloopAConvertAndScaleWithZeroPoint =
-      MixedBuilderQuantA::CollectiveMma<
-          cute::tuple<ElementInputA, ElementScale, ElementZero>, ElementInputB>;
-  using GemmAConvertAndScaleWithZeroPoint =
-      GemmAdapterBuilder::GemmUniversalAdapter<
-          MainloopAConvertAndScaleWithZeroPoint>;
-
   // B-narrow Mainloop & GemmUniversalAdapter
-  using MainloopBConvertOnly =
-      MixedBuilderQuantB::CollectiveMma<ElementInputB,
-                                        cute::tuple<ElementInputA>>;
-  using GemmBConvertOnly =
-      GemmAdapterBuilder::GemmUniversalAdapter<MainloopBConvertOnly>;
-
-  using MainloopBConvertAndScale = MixedBuilderQuantB::CollectiveMma<
-      ElementInputB, cute::tuple<ElementInputA, ElementScale>>;
-  using GemmBConvertAndScale =
-      GemmAdapterBuilder::GemmUniversalAdapter<MainloopBConvertAndScale>;
-
   using MainloopBConvertAndScaleWithZeroPoint =
       MixedBuilderQuantB::CollectiveMma<
           ElementInputB, cute::tuple<ElementInputA, ElementScale, ElementZero>>;
@@ -702,31 +667,7 @@ int main(int argc, const char** argv)
       GemmAdapterBuilder::GemmUniversalAdapter<
           MainloopBConvertAndScaleWithZeroPoint>;
 
-  if(options.a_narrower){
-    // std::cout << "Setting A as narrower type" << std::endl;
-    // if(options.mode ==  GemmMode::ConvertOnly) {
-    //   std::cout << "Running in ConvertOnly mode." << std::endl;
-    //   CUTLASS_CHECK(ExampleRunner<GemmAConvertOnly>{}.run(options, hw_info));
-    // }else if(options.mode == GemmMode::ConvertAndScale){
-    //   std::cout << "Running in ConvertAndScale mode." << std::endl;
-    //   CUTLASS_CHECK(ExampleRunner<GemmAConvertAndScale>{}.run(options, hw_info));
-    // }else{
-    //   std::cout << "Running in ConvertAndScaleWithZeroPoint mode." << std::endl;
-    //   CUTLASS_CHECK(ExampleRunner<GemmAConvertAndScaleWithZeroPoint>{}.run(options, hw_info));
-    // }
-  }else{
-    std::cout << "Setting B as narrower type" << std::endl;
-    if(options.mode ==  GemmMode::ConvertOnly) {
-      std::cout << "Running in ConvertOnly mode." << std::endl;
-      CUTLASS_CHECK(ExampleRunner<GemmBConvertOnly>{}.run(options, hw_info));
-    }else if(options.mode == GemmMode::ConvertAndScale){
-      std::cout << "Running in ConvertAndScale mode." << std::endl;
-      CUTLASS_CHECK(ExampleRunner<GemmBConvertAndScale>{}.run(options, hw_info));
-    }else{
-      std::cout << "Running in ConvertAndScaleWithZeroPoint mode." << std::endl;
-      CUTLASS_CHECK(ExampleRunner<GemmBConvertAndScaleWithZeroPoint>{}.run(options, hw_info));
-    }
-  }
+  CUTLASS_CHECK(ExampleRunner<GemmBConvertAndScaleWithZeroPoint>{}.run(options, hw_info));
 
   return 0;
 }

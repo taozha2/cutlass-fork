@@ -117,8 +117,10 @@ CUTLASS_GLOBAL void dequantize_kernel(DequantizedElement* dq_buffer,
   cute::Tensor rmem_scale = cute::make_fragment_like(tScale_gScale(_, _, _, 0));
   cute::Tensor rmem_zero = cute::make_fragment_like(tZero_gZero(_, _, _, 0));
   cute::Tensor rmem_op_dq = cute::make_fragment_like(tOpDq_gOpDq(_, _, _, 0));
-  cute::Tensor rmem_op_scaled = cute::make_fragment_like<ElementScale>(rmem_op_dq);
-  cute::Tensor rmem_zero_buf = cute::make_fragment_like<ElementScale>(rmem_zero);
+  cute::Tensor rmem_op_scaled = cute::make_fragment_like<int8_t>(rmem_op_dq);
+  cute::Tensor rmem_zero_buf = cute::make_fragment_like<int8_t>(rmem_zero);
+
+  cute::Tensor rmem_op_scaled1 = cute::make_fragment_like<ElementScale>(rmem_op_dq);
 
   cute::Tensor pred_id = cute::make_identity_tensor(shape(operand_layout));
   auto pred_blk_tile = cute::local_tile(pred_id, blk_shape, blk_coord);
@@ -126,18 +128,39 @@ CUTLASS_GLOBAL void dequantize_kernel(DequantizedElement* dq_buffer,
 
   const auto num_iters = cute::size<3>(tOpDq_gOpDq);
 
+  #define PRINT_S(x) if (thread0()) {print(#x); print(", "); print((x)); print(", \n");}
+
   for (int ii = 0; ii < num_iters; ++ii) {
     const auto thread_offset = cute::get<0>(pred_thr_partition(0, 0, 0, ii));
     if (thread_offset < cute::size<0>(operand_layout)) {
       cute::copy(tOpQ_gOpQ(_, _, _, ii), rmem_op_q);
       cute::copy(tScale_gScale(_, _, _, ii), rmem_scale);
       cute::copy(tZero_gZero(_, _, _, ii), rmem_zero);
-      cute::transform(rmem_op_q, rmem_op_scaled, [] (const QuantizedElement& elt) { return ElementScale((short)elt); } );
-      cute::transform(rmem_zero, rmem_zero_buf, [] (const ElementZero& elt) { return ElementScale(elt); } );
-      cute::transform(rmem_op_scaled, rmem_scale, rmem_op_scaled, cute::multiplies{});
-      cute::transform(rmem_op_scaled, rmem_zero_buf, rmem_op_scaled, cute::plus{});
-      cute::transform(rmem_op_scaled, rmem_op_dq, [] (const ElementScale& elt) { return DequantizedElement(elt); } );
+
+      PRINT_S((int)(rmem_op_q[0].get()));
+      cute::transform(rmem_op_q, rmem_op_scaled, [] (const QuantizedElement& elt) { return int8_t((short)elt); } );
+      PRINT_S(rmem_op_scaled[0]);
+
+      PRINT_S((int)(rmem_zero[0].get()));
+      cute::transform(rmem_zero, rmem_zero_buf, [] (const ElementZero& elt) { return int8_t(elt); } );
+      PRINT_S(rmem_zero_buf[0]);
+
+      cute::transform(rmem_op_scaled, rmem_zero_buf, rmem_op_scaled, cute::minus{});
+      PRINT_S(rmem_op_scaled[0]);
+
+      cute::transform(rmem_op_scaled, rmem_op_scaled1, [] (const int8_t& elt) { return ElementScale((short)elt); });
+      PRINT_S((float)(rmem_op_scaled1[0]));
+
+      PRINT_S((float)(rmem_scale[0]));
+      cute::transform(rmem_op_scaled1, rmem_scale, rmem_op_scaled1, cute::multiplies{});
+      PRINT_S((float)(rmem_op_scaled1[0]));
+
+      cute::transform(rmem_op_scaled1, rmem_op_dq, [] (const ElementScale& elt) { return DequantizedElement(elt); } );
+      PRINT_S((float)(rmem_op_dq[0]));
+
       cute::copy(rmem_op_dq, tOpDq_gOpDq(_, _, _, ii));
+
+
     }
   }
 }

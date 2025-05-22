@@ -100,8 +100,8 @@ void initialize_mixed_dtype_block(cutlass::DeviceAllocation<T1>& block_device,
 
     for (int i = 0; i < 32; ++i) {
       for (int j = 0; j < 4096; ++j) {
-#if INT4_DEBUG
-      block_host[i * 4096 + j ] = static_cast<T1>((j +1) % 7);
+#if 1//INT4_DEBUG
+      block_host[i * 4096 + j ] = static_cast<T1>((j +1) % 8);
 #else
       block_host[i * 4096 + j ] = static_cast<T1>(dist(rng));
 #endif
