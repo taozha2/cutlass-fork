@@ -64,6 +64,10 @@ SYCL_DEVICE_BUILTIN(cute::intel::int8 intel_subgroup_block_read_transform_u16_k1
     int pitch_minus_one, cute::intel::coord_t coord));
 
 // U16 prefetch
+SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m1k16v2(
+    intptr_t baseoffset, int width_minus_one, int height_minus_one,
+    int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
+
 SYCL_DEVICE_BUILTIN(void __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v1(
     intptr_t baseoffset, int width_minus_one, int height_minus_one,
     int pitch_minus_one, cute::intel::coord_t coord, enum CacheControl cache_control));
@@ -315,6 +319,7 @@ struct XE_2D_U16x4x16_LD_N {
 
 struct XE_2D_U16x8x16_LD_N {
   using BlockShape = Shape<_8, _16>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -348,6 +353,7 @@ struct XE_2D_U16x8x16_LD_N {
 
 struct XE_2D_U16x16x16_LD_N {
   using BlockShape = Shape<_16, _16>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -381,6 +387,7 @@ struct XE_2D_U16x16x16_LD_N {
 
 struct XE_2D_U16x32x16_LD_N {
   using BlockShape = Shape<_32, _16>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -414,6 +421,7 @@ struct XE_2D_U16x32x16_LD_N {
 
 struct XE_2D_U16x1x32_LD_N {
   using BlockShape = Shape<_1, _32>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -434,8 +442,9 @@ struct XE_2D_U16x1x32_LD_N {
                                       int height, int pitch,
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
-      intel_sub_group_2d_block_prefetch_16b_1r16x2c(
-          (__global void*)baseoffset, width, height, pitch, coord);
+      __builtin_IB_subgroup_block_read_prefetch_u16_m1k16v2(
+          (intptr_t)baseoffset, width - 1, height - 1, pitch - 1, coord,
+          CacheControl::kL1C_L3C);
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -466,6 +475,7 @@ struct XE_2D_U16x1x32_LD_NN {
 
 struct XE_2D_U16x2x32_LD_N {
   using BlockShape = Shape<_2, _32>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -498,6 +508,7 @@ struct XE_2D_U16x2x32_LD_N {
 
 struct XE_2D_U16x4x32_LD_N {
   using BlockShape = Shape<_4, _32>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -530,6 +541,7 @@ struct XE_2D_U16x4x32_LD_N {
 
 struct XE_2D_U16x8x32_LD_N {
   using BlockShape = Shape<_8, _32>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -553,6 +565,16 @@ struct XE_2D_U16x8x32_LD_N {
       __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v2(
           (intptr_t)baseoffset, width - 1, height - 1, pitch - 1, coord,
           CacheControl::kL1C_L3C);
+  #define PRINT(x) print(#x ": "); print(x); print("\n");
+
+          // if (thread(511, 0)) {
+          //   PRINT((intptr_t)baseoffset);
+          //   PRINT(width);
+          //   PRINT(height);
+          //   PRINT(pitch);
+          //   PRINT(coord[0]);
+          //   PRINT(coord[1]);
+          // }
 #else
       CUTE_INVALID_CONTROL_PATH(
           "Trying to use block prefetch on non-PVC hardware");
@@ -563,6 +585,7 @@ struct XE_2D_U16x8x32_LD_N {
 
 struct XE_2D_U16x16x32_LD_N {
   using BlockShape = Shape<_16, _32>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -596,6 +619,7 @@ struct XE_2D_U16x16x32_LD_N {
 
 struct XE_2D_U16x32x32_LD_N {
   using BlockShape = Shape<_32, _32>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -616,8 +640,8 @@ struct XE_2D_U16x32x32_LD_N {
                                       int height, int pitch,
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
-      // __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v2(
-      __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v2(
+      __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v2(
+      // __builtin_IB_subgroup_block_read_prefetch_u16_m8k16v2(
           (intptr_t)baseoffset, width - 1, height - 1, pitch - 1, coord,
           CacheControl::kL1C_L3C);
 #else
@@ -630,6 +654,7 @@ struct XE_2D_U16x32x32_LD_N {
 
 struct XE_2D_U16x16x16_LD_V {
   using BlockShape = Shape<_16, _16>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -663,6 +688,7 @@ struct XE_2D_U16x16x16_LD_V {
 
 struct XE_2D_U16x32x16_LD_V {
   using BlockShape = Shape<_32, _16>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -696,6 +722,7 @@ struct XE_2D_U16x32x16_LD_V {
 
 struct XE_2D_U16x16x32_LD_V {
   using BlockShape = Shape<_16, _32>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -729,6 +756,7 @@ struct XE_2D_U16x16x32_LD_V {
 
 struct XE_2D_U16x32x32_LD_V {
   using BlockShape = Shape<_32, _32>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
@@ -749,7 +777,7 @@ struct XE_2D_U16x32x32_LD_V {
                                       int height, int pitch,
                                       intel::coord_t coord) {
 #if defined(SYCL_INTEL_TARGET)
-      __builtin_IB_subgroup_block_read_prefetch_u16_m16k16v2(
+      __builtin_IB_subgroup_block_read_prefetch_u16_m32k16v2(
           (intptr_t)baseoffset, width - 1, height - 1, pitch - 1, coord,
           CacheControl::kL1C_L3C);
 #else
