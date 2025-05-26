@@ -92,14 +92,14 @@ struct Options {
   int m, n, k, l, iterations;
   int g, warmup;
   float alpha, beta;
-  int flush_cache, cache_cnt, l3_cache;
+  int flush_cache, l3_cache;
 
   Options():
     help(false),
     error(false),
     m(5120), n(4096), k(4096), l(1), iterations(20),
     g(128), mode(2), a_narrower(false),
-    alpha(1.f), beta(0.f), warmup(0), flush_cache(0), cache_cnt(3)
+    alpha(1.f), beta(0.f), warmup(0), flush_cache(0)
   { }
 
   // Parses the command line
@@ -122,7 +122,6 @@ struct Options {
     cmd.get_cmd_line_argument("iterations", iterations, 100);
     cmd.get_cmd_line_argument("warmup", warmup, 10);
     cmd.get_cmd_line_argument("flush_cache", flush_cache, 1);
-    cmd.get_cmd_line_argument("cache_cnt", cache_cnt, 3);
     cmd.get_cmd_line_argument("l3_cache", l3_cache, 20);
 
     a_narrower = false;
@@ -270,22 +269,25 @@ struct ExampleRunner {
   }
 
   void flush_cache(int l3_cache_size) {
+    using cache_dtype = uint32_t;
+
     std::vector<uint8_t> host_cache;
     cutlass::DeviceAllocation<uint8_t> dev_cache_block;
-    dev_cache_block.reset(l3_cache_size + 64);
+    dev_cache_block.reset(l3_cache_size + sizeof(cache_dtype));
     host_cache = std::vector<uint8_t>((size_t)dev_cache_block.size());
-    // fill_matrix(host_cache);
+    fill_matrix(host_cache);
     syclcompat::memcpy(dev_cache_block.get(), host_cache.data(),
                        dev_cache_block.size());
     syclcompat::wait();
 
     auto q = syclcompat::get_default_queue();
 
-    using cache_dtype = uint32_t;
     cache_dtype* mem_to = (cache_dtype*)dev_cache_block.get();
     cache_dtype* mem_from = (cache_dtype*)(dev_cache_block.get() + sizeof(cache_dtype));
 
-    q.parallel_for(sycl::nd_range<1>(l3_cache_size / sizeof(cache_dtype), 1024), [=](auto idx) {
+    static constexpr auto wg_size = 512;
+
+    q.parallel_for(sycl::nd_range<1>(l3_cache_size / sizeof(cache_dtype) / wg_size, wg_size), [=](auto idx) {
       int i = idx.get_global_id();
       *mem_to += mem_from[i];
     });
@@ -537,10 +539,13 @@ struct ExampleRunner {
                   sizeof_bits_v<ElementOutput> * options.m * options.n / 8) * 1e-9;
 
     std::cout << "Problem Size(mnk): " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
-    printf("    --l=%d --iterations=%d --flush_cache=%d, --warmup=%d, --cache_cnt=%d, --l3_cache_size=%d\n", options.l, options.iterations, options.flush_cache, options.warmup, options.cache_cnt, l3_cache_size);
+    printf("    --l=%d --iterations=%d --flush_cache=%d, --warmup=%d, --l3_cache_size=%d\n", options.l, options.iterations, options.flush_cache, options.warmup, l3_cache_size);
 
     if (options.iterations > 0) {
       for (int i = 0; i < options.iterations; ++i) {
+        if (options.flush_cache) {
+          flush_cache(options.l3_cache);
+        }
         GPU_Clock timer;
         timer.start();
         gemm_op.run();
@@ -602,7 +607,7 @@ void run_int4(Options const& options) {
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
                                     Layout<Shape<Int<thread_m>, Int<thread_n>, _1>, Stride<Int<thread_n>, _1, _0>>>::TiledMMA;
 
-  constexpr int PipelineStages = 2;
+  constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelPVCMixedPrecision<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelPVCEpilogue;
 
@@ -677,25 +682,25 @@ int main(int argc, const char** argv)
     return -1;
   }
 
-  // options.m = 32;
-  // options.n = 4096;
-  // options.k = 4096;
-  // run_int4<cutlass::layout::RowMajor, cutlass::layout::RowMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x32_LD_NN, 32, 128, 32, 1, 4>(options);
+  options.m = 32;
+  options.n = 4096;
+  options.k = 4096;
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::RowMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x32_LD_NN, 32, 128, 32, 1, 4>(options);
 
   options.m = 32;
   options.n = 14336;
   options.k = 4096;
   run_int4<cutlass::layout::RowMajor, cutlass::layout::RowMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x32_LD_NN, 32, 128, 32, 1, 4>(options);
 
-  // options.m = 48;
-  // options.n = 4096;
-  // options.k = 4096;
-  // run_int4<cutlass::layout::RowMajor, cutlass::layout::RowMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x32_LD_NN, 64, 128, 32, 1, 4>(options);
+  options.m = 48;
+  options.n = 4096;
+  options.k = 4096;
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::RowMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x32_LD_NN, 64, 128, 32, 1, 4>(options);
 
-  // options.m = 48;
-  // options.n = 14336;
-  // options.k = 4096;
-  // run_int4<cutlass::layout::RowMajor, cutlass::layout::RowMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x32_LD_NN, 64, 128, 32, 1, 4>(options);
+  options.m = 48;
+  options.n = 14336;
+  options.k = 4096;
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::RowMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x32_LD_NN, 64, 128, 32, 1, 4>(options);
 
   return 0;
 }

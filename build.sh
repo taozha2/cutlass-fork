@@ -28,7 +28,7 @@ export OCL_ICD_VENDORS=$HOME
 # https://github.com/intel/llvm/releases/tag/nightly-2024-05-16
 # https://ubit-gfx.intel.com/build/19168301/artifacts
 sycl_compiler_path=/opt/cutlass/compiler/20250515/
-gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-29375/extract/
+#gpu_driver_path=/opt/cutlass/gpu_driver/gfx-driver-ci-comp_igc-29375/extract/
 export CPATH=$sycl_compiler_path:$sycl_compiler_path/include/:$sycl_compiler_path/include/sycl/
 export LIBRARY_PATH=$gpu_driver_path/usr/lib/x86_64-linux-gnu/:$sycl_compiler_path/lib/
 export LD_LIBRARY_PATH=$LIBRARY_PATH
@@ -61,8 +61,8 @@ cmake .. -G Ninja -DCMAKE_CUDA_HOST_COMPILER=$clang_path -DCMAKE_CXX_FLAGS_RELEA
 -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
 -DCMAKE_CXX_FLAGS=" -DSYCL_INTEL_TARGET -gline-tables-only $1 $2 $3" \
 && ninja -v $target && \
-$target --m=32 --n=14336 --k=4096 --l=1 --iterations=20 --flush_cache=1 --warmup=10 --l3_cache_size=20 --cache_cnt=3 \
-#$target --m=32 --n=4096 --k=4096 --l=1 --iterations=20 --flush_cache=1 --warmup=10 --l3_cache_size=20 --cache_cnt=3
+$target --m=32 --n=14336 --k=4096 --l=1 --iterations=20 --flush_cache=1 --warmup=10 --l3_cache_size=32 \
+#$target --m=32 --n=4096 --k=4096 --l=1 --iterations=20 --flush_cache=1 --warmup=10 --l3_cache_size=32
 
 
 # -gline-tables-only

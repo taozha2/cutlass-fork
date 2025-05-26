@@ -53,7 +53,7 @@ cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DCUTLASS_SYCL_PROFILING_ENABLED=ON -
 
 target=./examples/sycl/int4/pvc_gemm_int4_quantization
 ninja $target && \
-$target --m=32 --n=14336 --k=4096 --l=1 --iterations=20 --flush_cache=1 --warmup=10 --l3_cache_size=192 --cache_cnt=3
+$target --m=32 --n=14336 --k=4096 --l=1 --iterations=20 --flush_cache=1 --warmup=10 --l3_cache_size=32
 
 
 #ninja benchmarks

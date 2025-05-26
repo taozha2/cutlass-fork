@@ -554,9 +554,11 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
 
     const int k_reload_factor = mainloop.group_size / BLK_K; 
 
+    syclcompat::wg_barrier();
+
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = 0, k = k_start_idx; k_tile < k_tile_count; ++k_tile, ++k, ++prefetch_k) {
-            barrier_arrive(2);
+      // barrier_arrive(2);
 
       // Copy gmem to rmem for the first k_tile
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k), frag_copy_A);
@@ -582,8 +584,7 @@ template <class T, int N> using vector_t = sycl::marray<T, N>;
                       fragment_zero_input);
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
-            barrier_wait(2);
-
+      // barrier_wait(2);
     }
   }
 };
