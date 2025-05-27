@@ -414,6 +414,7 @@ struct XE_2D_U16x32x16_LD_N {
 
 struct XE_2D_U16x1x32_LD_N {
   using BlockShape = Shape<_1, _32>;
+  using inst_dtype = uint16_t;
 
   template <class T>
   CUTE_HOST_DEVICE static void copy(const void *baseoffset, int width,
