@@ -233,6 +233,28 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     constexpr int barrier_scope = 2;
     int prefetch_k = k_start_idx;
 
+#if 1
+#define PRINT(x) print(#x ": "); print(x); print("\n");
+    if (cute::thread(0, 1)) {
+      print("======================= A: \n");
+      PRINT(tCgA);
+      PRINT(tAgA);
+
+      PRINT(tCrA);
+      PRINT(tArA);
+      // PRINT(mainloop.tiled_copy_a);
+
+      print("======================= B: \n");
+      PRINT(tCgB);
+      PRINT(tBgB);
+
+      PRINT(tCrB);
+      PRINT(tBrB);
+      // PRINT(mainloop.tiled_copy_b);
+      }
+#undef PRINT
+#endif
+
     CUTLASS_PRAGMA_UNROLL
     for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
       prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));

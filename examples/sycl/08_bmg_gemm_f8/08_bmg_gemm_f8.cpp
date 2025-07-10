@@ -336,12 +336,12 @@ int launcher(Options& options)
   using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
   using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
 
-  using TileShape = Shape<_256, _256, _32>;
+  using TileShape = Shape<_128, _128, _32>;
 
   // TODO: Consider smaller tile size to reduce register pressure
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
-      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+      Layout<Shape<_4, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 2;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelW8A8<PipelineStages>;
