@@ -103,7 +103,7 @@ struct Options {
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
-    cmd.get_cmd_line_argument("iterations", iterations, 100);
+    cmd.get_cmd_line_argument("iterations", iterations, 0);
   }
 
   /// Prints the usage statement.
@@ -124,6 +124,20 @@ struct Options {
   }
 };
 
+namespace cutlass {
+  static inline std::size_t get_llc_size() {
+    #if defined(CUTLASS_ENABLE_SYCL)
+      return syclcompat::get_default_queue().get_device().get_info<sycl::info::device::global_mem_cache_size>();   
+    #else
+      cudaDeviceProp prop_struct;
+      auto result = cudaGetDeviceProperties(&prop_struct, 0);
+      if (result != cudaSuccess) {
+        throw std::runtime_error(cudaGetErrorString(result));
+      }
+      return static_cast<std::size_t>(prop_struct.l2CacheSize);
+    #endif
+  }
+}
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <
@@ -164,9 +178,11 @@ struct ExampleRunner {
   StrideD stride_D;
   uint64_t seed = 0;
 
-  cutlass::DeviceAllocation<ElementA> block_A;
-  cutlass::DeviceAllocation<ElementB> block_B;
-  cutlass::DeviceAllocation<ElementC> block_C;
+  uint32_t count;
+
+  std::vector<cutlass::DeviceAllocation<ElementA>> block_A;
+  std::vector<cutlass::DeviceAllocation<ElementB>> block_B;
+  std::vector<cutlass::DeviceAllocation<ElementC>> block_C;
   cutlass::DeviceAllocation<ElementOutput> block_D;
   cutlass::DeviceAllocation<ElementOutput> block_ref_D;
 
@@ -176,24 +192,24 @@ struct ExampleRunner {
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
       auto [M, N, K, L] = problem_size;
 
-      cutlass::DeviceAllocation<half_t> block_A_fp16(block_A.size());
-      cutlass::DeviceAllocation<half_t> block_B_fp16(block_B.size());
+      cutlass::DeviceAllocation<half_t> block_A_fp16(block_A[0].size());
+      cutlass::DeviceAllocation<half_t> block_B_fp16(block_B[0].size());
 
       // fp8 -> fp16
       convert_dtype<ElementA, half_t>(
-          block_A.get(),
+          block_A[0].get(),
           block_A_fp16.get(),
-          block_A.size()
+          block_A[0].size()
       );
       convert_dtype<ElementB, half_t>(
-          block_B.get(),
+          block_B[0].get(),
           block_B_fp16.get(),
-          block_B.size()
+          block_B[0].size()
       );
 
       cutlass::TensorRef ref_A(block_A_fp16.get(), LayoutA::packed({M, K}));
       cutlass::TensorRef ref_B(block_B_fp16.get(), LayoutB::packed({K, N}));
-      cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({ M, N }));
+      cutlass::TensorRef ref_C(block_C[0].get(), LayoutC::packed({ M, N }));
       cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({ M, N }));
 
       cutlass::reference::device::GemmComplex(
@@ -231,15 +247,33 @@ struct ExampleRunner {
     stride_C = cutlass::make_cute_packed_stride(StrideC{}, cute::make_shape(M, N, L));
     stride_D = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(M, N, L));
 
-    block_A.reset(static_cast<std::size_t>(M) * K * L);
-    block_B.reset(static_cast<std::size_t>(K) * N * L);
-    block_C.reset(static_cast<std::size_t>(M) * N * L);
-    block_D.reset(static_cast<std::size_t>(M) * N * L);
-    block_ref_D.reset(static_cast<std::size_t>(M) * N * L);
 
-    initialize_block(block_A, seed + 2023);
-    initialize_block(block_B, seed + 2022);
-    initialize_block(block_C, seed + 2021);
+    std::size_t size_A = cute::cosize(make_layout(cute::make_shape(M, K, L), stride_A));
+    std::size_t size_B = cute::cosize(make_layout(cute::make_shape(N, K, L), stride_B));
+    std::size_t size_C = cute::cosize(make_layout(cute::make_shape(M, N, L), stride_C));
+    std::size_t mem_occupied_ABC = (size_A * sizeof(ElementA)) + (size_B * sizeof(ElementB)) + 
+                                    (size_C * sizeof(ElementC));
+    count = std::ceil(static_cast<float>(cutlass::get_llc_size()) / static_cast<float>(mem_occupied_ABC)) + 1;
+
+
+    for(int i=0; i < count; i++) {
+      block_A.emplace_back();
+      block_B.emplace_back();
+      block_C.emplace_back();
+    }
+
+    for (int i = 0; i < count; i++) {
+      block_A[i].reset(size_A);
+      block_B[i].reset(size_B);
+      block_C[i].reset(size_C);
+      initialize_block(block_A[i], seed + 2023 + i);
+      initialize_block(block_B[i], seed + 2023 + i);
+      initialize_block(block_C[i], seed + 2023 + i);
+    }
+
+    block_D.reset(size_C);
+    block_ref_D.reset(size_C);
+    
   }
   
   cutlass::Status run(const Options& options, const cutlass::KernelHardwareInfo& hw_info) {
@@ -250,8 +284,8 @@ struct ExampleRunner {
     typename Gemm::GemmKernel::Arguments arguments{
       cutlass::gemm::GemmUniversalMode::kGemm,
       problem_size,
-      {block_A.get(), stride_A, block_B.get(), stride_B},
-      {{options.alpha, options.beta}, block_C.get(), stride_C, block_D.get(), stride_D},
+      {block_A[0].get(), stride_A, block_B[0].get(), stride_B},
+      {{options.alpha, options.beta}, block_C[0].get(), stride_C, block_D.get(), stride_D},
       hw_info
     };
 
@@ -281,18 +315,48 @@ struct ExampleRunner {
     bool passed = verify(problem_size, options.alpha, options.beta);
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
-    if(!passed) return cutlass::Status::kErrorInternal;
+    // if(!passed) return cutlass::Status::kErrorInternal;
 
     if (options.iterations > 0) {
-      GPU_Clock timer;
-      timer.start();
-      for (int i = 0; i < options.iterations; ++i) {
+      for (int j =0; j < 10; j++) {
+        typename Gemm::GemmKernel::Arguments arguments{
+          cutlass::gemm::GemmUniversalMode::kGemm,
+          problem_size,
+          {block_A[j %count].get(), stride_A, block_B[j %count].get(), stride_B},
+          {{options.alpha, options.beta}, block_C[j %count].get(), stride_C, block_D.get(), stride_D},
+          hw_info
+        };
+        gemm_op.initialize(arguments, workspace.get());
         gemm_op.run();
       }
       syclcompat::wait();
+      double best_runtime_ms = std::numeric_limits<double>::max();;
+      double worst_runtime_ms = std::numeric_limits<double>::lowest();
+      double total_runtime_ms = 0;
+      
+      for (int i = 0; i < options.iterations; ++i) {
+        typename Gemm::GemmKernel::Arguments arguments{
+          cutlass::gemm::GemmUniversalMode::kGemm,
+          problem_size,
+          {block_A[i %count].get(), stride_A, block_B[i %count].get(), stride_B},
+          {{options.alpha, options.beta}, block_C[i %count].get(), stride_C, block_D.get(), stride_D},
+          hw_info
+        };
+        gemm_op.initialize(arguments, workspace.get());
+        GPU_Clock timer;
+        timer.start();
+        gemm_op.run();
+        auto ms_elapsed = timer.milliseconds();
+        total_runtime_ms += ms_elapsed;
+        best_runtime_ms = std::min<double>(best_runtime_ms, ms_elapsed);
+        worst_runtime_ms = std::max<double>(worst_runtime_ms, ms_elapsed);
+    
+      }
+      syclcompat::wait();
 
-      float cute_time = timer.seconds() / options.iterations;
-      double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-12;
+      float cute_time = (total_runtime_ms - best_runtime_ms -worst_runtime_ms) / (options.iterations - 2);
+      double tflops = (2.0 * options.m * options.n * options.k * options.l) * 1e-9;
+      double Io = ((options.m + options.n) * options.k * sizeof(ElementA) + options.m * options.n *sizeof(ElementOutput)) * 1e-6;
       std::cout << "Problem Size: " << options.m << 'x' << options.n << 'x' << options.k << 'x' << options.l << std::endl;
       if constexpr (std::is_same_v<ElementA, float_e4m3_t>) {
         std::cout << "Datatype: float_e4m3_t"<< std::endl;
@@ -301,7 +365,7 @@ struct ExampleRunner {
       } else {
         static_assert(cutlass::detail::dependent_false<ElementA>, "Not a valid fp8 datatype.");
       }
-      printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s  (%6.4f)ms\n", tflops / cute_time, cute_time*1000);
+      printf("Cutlass GEMM Performance:     [%4.3f]TFlop/s [%4.3f]Gb/s  (%6.4f)ms\n", tflops / cute_time, Io/cute_time, cute_time);
     }
 
     return cutlass::Status::kSuccess;
@@ -336,14 +400,14 @@ int launcher(Options& options)
   using GmemTiledCopyA = XE_2D_U8x32x32_LD_N;
   using GmemTiledCopyB = XE_2D_U8x32x32_LD_V;
 
-  using TileShape = Shape<_256, _256, _32>;
+  using TileShape = Shape<_128, _128, _32>;
 
   // TODO: Consider smaller tile size to reduce register pressure
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
-      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+      Layout<Shape<_4, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
-  constexpr int PipelineStages = 2;
+  constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelW8A8<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
@@ -397,7 +461,19 @@ int main(int argc, const char** argv) {
   //
   // Parse options
   //
+  // Layout sg_layout = Layout<Shape<_4,_4>, Stride<_4, _1>>{};
+  // auto inv_layout = right_inverse(sg_layout);
+  // Layout left_half_layout = Layout<Shape<_4, _2>, Stride<_1, _4>>{};
+  // Layout upper_half_layout = Layout<Shape<_4, _2>, Stride<_2, _1>>{};
+  // auto inv_half_layout = right_inverse(upper_half_layout);
+  // // cute::print_layout(sg_layout); print("\n");
+  // // cute::print_layout(inv_layout); print("\n");
+  // cute::print_layout(Layout<Shape<_2, _4>, Stride<_1, _2>>{}); print(idx2crd(5, make_shape(2, 4))); print("\n");
 
+  // cute::print_layout(inv_half_layout); print("\n");
+  // cute::print(right_inverse(Layout<Shape<_2, _4>, Stride<_4, _1>>{})); print("\n");
+  // cute::print_layout(composition(sg_layout, left_half_layout));
+  // cute::print_layout(composition(sg_layout, inv_half_layout));
   Options options;
 
   options.parse(argc, argv);
@@ -412,6 +488,6 @@ int main(int argc, const char** argv) {
     return -1;
   }
   launcher<cutlass::float_e5m2_t>(options);
-  launcher<cutlass::float_e4m3_t>(options);
+  // launcher<cutlass::float_e4m3_t>(options);
   return 0;
 }

@@ -96,12 +96,17 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
   static constexpr auto SG_M = ceil_div(BLK_M, ATOM_M);
   static constexpr auto SG_N = ceil_div(BLK_N, ATOM_N);
   static constexpr auto SG_K = ceil_div(BLK_K, ATOM_K);
+  static constexpr auto SG_size_A = sizeof(half_t) * SG_M * SG_K;
+  static constexpr auto SG_size_B = sizeof(half_t) * SG_K * SG_N;
+  static constexpr auto SLM_size = 128 << 10;
   using SubgroupTileShape = Shape<decltype(SG_M), decltype(SG_N), decltype(SG_K)>;
 
   // 32
   static constexpr auto Num_SGs = ATOM_N * ATOM_M * ATOM_K;
   static constexpr uint32_t MaxThreadsPerBlock = size(TiledMma{});
-
+  static constexpr auto inner_loop_k = cute::gcd(SLM_size / (SG_size_A * ATOM_M + SG_size_B * ATOM_N), Num_SGs / 2 / ATOM_N);
+  static_assert(inner_loop_k == 2, "half of the SGs will be better");
+  static constexpr auto allocate_elements = inner_loop_k * (SG_M * SG_K * ATOM_M + SG_N * SG_K * ATOM_N);
   using CopyThreadShape = Shape<_1, Int<SubgroupSize>>;
 
   using traits_load_A = Copy_Traits<GmemTiledCopyA, StrideA>;
@@ -144,7 +149,7 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     auto mB_nkl = make_tensor(make_gmem_ptr(args.ptr_B), make_layout(make_shape(N, K, L), args.dB));
     Copy_A tiled_copy_a{Copy_A{}.with(mA_mkl)};
     Copy_B tiled_copy_b{Copy_B{}.with(mB_nkl)};
-
+    
     return Params{tiled_copy_a, tiled_copy_b};
   }
 
@@ -188,6 +193,10 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     static_assert(is_rmem<FrgTensorD>::value, "D tensor must be rmem resident.");
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
+    auto smem = syclcompat::local_mem<half_t[allocate_elements]>();
+    Tensor SATensor = make_tensor(make_smem_ptr(smem), make_shape(_16{}, Int<SG_M * SG_K / 16>{}, Int<ATOM_M>{}, Int<inner_loop_k>{}));
+    Tensor SBTensor = make_tensor(make_smem_ptr(smem + SG_M * SG_K * ATOM_M * inner_loop_k), make_shape(_16{}, Int<SG_N * SG_K / 16>{}, Int<inner_loop_k>{}, Int<ATOM_N>{}));
+  
     auto thr_copy_A = mainloop.tiled_copy_a.get_slice(thread_idx);
     auto thr_copy_B = mainloop.tiled_copy_b.get_slice(thread_idx);
 
@@ -195,36 +204,76 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     TiledMma tiled_mma;
     // TODO(Codeplay): see if we can make this nicer
     // To make all work items in a subgroup have the same global tensors pass in the index of work item 0 in each subgroup
+    Layout sg_layout = Layout<Shape<Int<ATOM_M>, Int<ATOM_N>>, Stride<Int<ATOM_N>,_1>>{};
+    Layout sg_layout_A = composition(sg_layout, make_layout(make_shape(Int<ATOM_M>{}, Int<inner_loop_k>{})));
+    Layout sg_layout_B = make_layout(make_shape(Int<inner_loop_k>{}, Int<ATOM_N>{}));
     auto sg = syclcompat::get_nd_item<1>().get_sub_group();
-    auto first_thread_in_sg_idx = sg.get_group_linear_id() * DispatchPolicy::SubgroupSize;
+    auto sg_id = sg.get_group_linear_id();
+    auto logic_sg_id = sg_id < Num_SGs /2 ? sg_layout_A(sg_id) : sg_layout_B(sg_id - Num_SGs / 2); 
+    auto first_thread_in_sg_idx = logic_sg_id * DispatchPolicy::SubgroupSize;
     auto thr_mma = tiled_mma.get_slice(first_thread_in_sg_idx);
 
     // Partition global counting tensors for MMA
     Tensor tCgA = thr_mma.partition_A(gA);
     Tensor tCgB = thr_mma.partition_B(gB);
 
-    Tensor tCrA = make_tensor<uint8_t>(make_fragment_layout(mainloop.tiled_copy_a, tCgA(_,_,_,0).shape()));
-    Tensor tCrB = make_tensor<uint8_t>(make_fragment_layout(mainloop.tiled_copy_b, tCgB(_,_,_,0).shape()));
+    Tensor tCrA_fp16 = make_tensor<half_t>(make_fragment_layout(mainloop.tiled_copy_a, tCgA(_,_,_,0).shape()));
+    Tensor tCrB_fp16 = make_tensor<half_t>(make_fragment_layout(mainloop.tiled_copy_b, tCgB(_,_,_,0).shape()));
 
-    Tensor tCrA_fp16 = make_fragment_like<half_t>(tCrA);
-    Tensor tCrB_fp16 = make_fragment_like<half_t>(tCrB);
+    Tensor tCrA = make_fragment_like<uint8_t>(tCrA_fp16);
+    Tensor tCrB = make_fragment_like<uint8_t>(tCrB_fp16);
 
     // Retile registers for copies
     Tensor tArA = thr_copy_A.retile_D(tCrA);
     Tensor tBrB = thr_copy_B.retile_D(tCrB);
-
+    
     // Retile global counting tensors for copies
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
 
+#if 1
+#define PRINT(x) print(#x ": "); print(x); print("\n");
+    if (cute::thread(144, 0)) {
+      print("======================= A: \n");
+      PRINT(tCgA);
+      print(logic_sg_id);print("\n");
+      print(idx2crd(4, make_shape(ATOM_M, ATOM_N), make_stride(ATOM_N, 1)));
+      PRINT(sg_layout_A);
+      PRINT(tAgA);
+
+      PRINT(tCrA);
+      PRINT(tArA);
+      // PRINT(mainloop.tiled_copy_a);
+
+      print("======================= B: \n");
+      PRINT(tCgB);
+      PRINT(sg_layout_B);
+      PRINT(tBgB);
+
+      PRINT(tCrB);
+      PRINT(tBrB);
+      // PRINT(mainloop.tiled_copy_b);
+      }
+#undef PRINT
+#endif
+    
     auto tiled_prefetch_a = cute::prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(mainloop.tiled_copy_a);
     auto tiled_prefetch_b = cute::prefetch_selector<Shape<Int<BLK_N>,Int<BLK_K>>, Num_SGs>(mainloop.tiled_copy_b);
     auto thr_prefetch_A = tiled_prefetch_a.get_slice(thread_idx);
     auto thr_prefetch_B = tiled_prefetch_b.get_slice(thread_idx);
-
+    
     // Partition global tile for prefetch
     auto pAgA = thr_prefetch_A.partition_S(gA);
     auto pBgB = thr_prefetch_B.partition_S(gB);
+
+    auto tiled_copy_A = make_tiled_copy(Copy_Atom<UniversalCopy<half_t>, half_t>{}, 
+                                      Layout<Shape<_16, _1>, Stride<_1, _0>>{},
+                                      Layout<Shape<_1, Int<SG_M * SG_K / 16>>, Stride<_0, _1>>{});
+    auto tiled_copy_B = make_tiled_copy(Copy_Atom<UniversalCopy<half_t>, half_t>{}, 
+                                        Layout<Shape<_16, _1>, Stride<_1, _0>>{},
+                                        Layout<Shape<_1, Int<SG_N * SG_K / 16>>, Stride<_0, _1>>{});
+    auto thr_copy_Asmem = tiled_copy_A.get_thread_slice(ThreadIdxX() % 16);
+    auto thr_copy_Bsmem = tiled_copy_B.get_thread_slice(ThreadIdxX() % 16);
 
     //
     // Mainloop
@@ -239,23 +288,53 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
     }
 
-    for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
+    CUTLASS_PRAGMA_UNROLL
+    for (int k_tile = k_start_idx; k_tile < ceil_div(k_tile_count, inner_loop_k); k_tile++, prefetch_k +=2) {
       barrier_arrive(barrier_scope);
-      // Copy gmem to rmem for the first k_tile
-      copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile), tArA);
-      copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile), tBrB);
-
-      convert_FP8_to_FP16<ElementA>(tCrA, tCrA_fp16);
-      convert_FP8_to_FP16<ElementB>(tCrB, tCrB_fp16);
+      if(sg_id < Num_SGs / 2){
+        auto [m, k] = idx2crd(logic_sg_id, make_shape(ATOM_M, inner_loop_k));
+        copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile * inner_loop_k + k), tArA);
+        convert_FP8_to_FP16<ElementA>(tCrA, tCrA_fp16);
+        Tensor thr_copy_store_A =  thr_copy_Asmem.partition_D(SATensor(_,_,m,k));
+        // Tensor tCrA_fp16_view = thr_copy_Asmem.partition_S(tCrA_fp16);
+        auto tCrA_fp16_view = make_tensor(static_cast<decltype(tCrA_fp16)&&>(tCrA_fp16).data(),
+                                          thr_copy_store_A.layout());
+        static_assert(size(tCrA_fp16)== size(tCrA_fp16_view));
+        copy(tiled_copy_A, tCrA_fp16_view, thr_copy_store_A);
+      } else {
+        auto [k, n] = idx2crd(logic_sg_id, make_shape(inner_loop_k, ATOM_N));
+        copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile * inner_loop_k + k), tBrB);
+        convert_FP8_to_FP16<ElementB>(tCrB, tCrB_fp16);
+        Tensor thr_copy_store_B = thr_copy_Bsmem.partition_D(SBTensor(_,_,k,n));
+        // Tensor tCrB_fp16_view = thr_copy_Bsmem.partition_S(tCrB_fp16);
+        auto tCrB_fp16_view = make_tensor(static_cast<decltype(tCrB_fp16)&&>(tCrB_fp16).data(),
+                                          thr_copy_store_B.layout());
+        copy(tiled_copy_B, tCrB_fp16_view, thr_copy_store_B);
+      }
 
       if (prefetch_k < k_tile_count) {
         prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
         prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
+        prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k+1));
+        prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k+1));
       }
-
-      cute::gemm(tiled_mma, tCrA_fp16, tCrB_fp16, accum);
-
       barrier_wait(barrier_scope);
+      
+      CUTLASS_PRAGMA_UNROLL
+      for(int k = 0; k < inner_loop_k; k++) {
+        barrier_arrive(barrier_scope);
+        auto [m, n] = idx2crd(sg_id, make_shape(ATOM_M, ATOM_N), make_stride(ATOM_N, 1));
+        Tensor thr_copy_load_A =  thr_copy_Asmem.partition_S(SATensor(_,_,m,k));
+        auto tCrA_fp16_view = make_tensor(static_cast<decltype(tCrA_fp16)&&>(tCrA_fp16).data(),
+                                          thr_copy_load_A.layout());
+        copy(tiled_copy_A, thr_copy_load_A, tCrA_fp16_view);
+        Tensor thr_copy_load_B =  thr_copy_Bsmem.partition_S(SBTensor(_,_,k,n));
+        auto tCrB_fp16_view = make_tensor(static_cast<decltype(tCrB_fp16)&&>(tCrB_fp16).data(),
+                                          thr_copy_load_B.layout());
+        copy(tiled_copy_B, thr_copy_load_B, tCrB_fp16_view);
+        barrier_wait(barrier_scope);
+        cute::gemm(tiled_mma, tCrA_fp16, tCrB_fp16, accum);
+      }
     }
   }
 };
