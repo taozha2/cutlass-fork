@@ -97,9 +97,9 @@ struct Options {
       return;
     }
 
-    cmd.get_cmd_line_argument("m", m, 5120);
-    cmd.get_cmd_line_argument("n", n, 4096);
-    cmd.get_cmd_line_argument("k", k, 4096);
+    cmd.get_cmd_line_argument("m", m, 128);
+    cmd.get_cmd_line_argument("n", n, 128);
+    cmd.get_cmd_line_argument("k", k, 64);
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("alpha", alpha, 1.f);
     cmd.get_cmd_line_argument("beta", beta, 0.f);
@@ -474,6 +474,8 @@ int main(int argc, const char** argv) {
   // cute::print(right_inverse(Layout<Shape<_2, _4>, Stride<_4, _1>>{})); print("\n");
   // cute::print_layout(composition(sg_layout, left_half_layout));
   // cute::print_layout(composition(sg_layout, inv_half_layout));
+  cute::print_layout(Layout<Shape<_4, _2>, Stride<_4, _1>>{});
+  cute::print_layout(Layout<Shape<_2, _4>, Stride<_4, _1>>{});
   Options options;
 
   options.parse(argc, argv);

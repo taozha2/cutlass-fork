@@ -130,6 +130,8 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
   struct Params {
     Copy_A tiled_copy_a;
     Copy_B tiled_copy_b;
+    ElementA const* ptr_A;
+    ElementB const* ptr_B;
   };
 
   //
@@ -150,7 +152,7 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     Copy_A tiled_copy_a{Copy_A{}.with(mA_mkl)};
     Copy_B tiled_copy_b{Copy_B{}.with(mB_nkl)};
     
-    return Params{tiled_copy_a, tiled_copy_b};
+    return Params{tiled_copy_a, tiled_copy_b, args.ptr_A, args.ptr_B};
   }
 
   template<class ProblemShape>
@@ -194,8 +196,8 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
     auto smem = syclcompat::local_mem<half_t[allocate_elements]>();
-    Tensor SATensor = make_tensor(make_smem_ptr(smem), make_shape(_16{}, Int<SG_M * SG_K / 16>{}, Int<ATOM_M>{}, Int<inner_loop_k>{}));
-    Tensor SBTensor = make_tensor(make_smem_ptr(smem + SG_M * SG_K * ATOM_M * inner_loop_k), make_shape(_16{}, Int<SG_N * SG_K / 16>{}, Int<inner_loop_k>{}, Int<ATOM_N>{}));
+    Tensor sA = make_tensor(make_smem_ptr(smem), make_shape(_16{}, Int<SG_M * SG_K / 16>{}, Int<ATOM_M>{}, Int<inner_loop_k>{}));
+    Tensor sB = make_tensor(make_smem_ptr(smem + SG_M * SG_K * ATOM_M * inner_loop_k), make_shape(_16{}, Int<SG_N * SG_K / 16>{}, Int<inner_loop_k>{}, Int<ATOM_N>{}));
   
     auto thr_copy_A = mainloop.tiled_copy_a.get_slice(thread_idx);
     auto thr_copy_B = mainloop.tiled_copy_b.get_slice(thread_idx);
@@ -231,10 +233,11 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     Tensor tAgA = thr_copy_A.retile_S(tCgA);
     Tensor tBgB = thr_copy_B.retile_S(tCgB);
 
-#if 1
+#if 0
 #define PRINT(x) print(#x ": "); print(x); print("\n");
-    if (cute::thread(144, 0)) {
+    if (cute::thread(0, 0)) {
       print("======================= A: \n");
+      PRINT(sA);
       PRINT(tCgA);
       print(logic_sg_id);print("\n");
       print(idx2crd(4, make_shape(ATOM_M, ATOM_N), make_stride(ATOM_N, 1)));
@@ -252,9 +255,9 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
 
       PRINT(tCrB);
       PRINT(tBrB);
-      // PRINT(mainloop.tiled_copy_b);
-      }
-#undef PRINT
+      // PRINT(mainloop.tiled_copy_b);  
+    }
+// #undef PRINT
 #endif
     
     auto tiled_prefetch_a = cute::prefetch_selector<Shape<Int<BLK_M>,Int<BLK_K>>, Num_SGs>(mainloop.tiled_copy_a);
@@ -282,60 +285,127 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     constexpr int barrier_scope = 2;
     int prefetch_k = k_start_idx;
 
-    CUTLASS_PRAGMA_UNROLL
-    for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
-      prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
-      prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
-    }
+    // CUTLASS_PRAGMA_UNROLL
+    // for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
+    //   prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
+    //   prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
+    // }
 
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = k_start_idx; k_tile < ceil_div(k_tile_count, inner_loop_k); k_tile++, prefetch_k +=2) {
       barrier_arrive(barrier_scope);
       if(sg_id < Num_SGs / 2){
-        auto [m, k] = idx2crd(logic_sg_id, make_shape(ATOM_M, inner_loop_k));
+        barrier_arrive(3);
+        auto [m, k] = idx2crd(logic_sg_id, make_shape(ATOM_M, inner_loop_k), make_stride(4, 1));
         copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile * inner_loop_k + k), tArA);
         convert_FP8_to_FP16<ElementA>(tCrA, tCrA_fp16);
-        Tensor thr_copy_store_A =  thr_copy_Asmem.partition_D(SATensor(_,_,m,k));
+        Tensor thr_copy_store_A =  thr_copy_Asmem.partition_D(sA(_,_,m,k));
         // Tensor tCrA_fp16_view = thr_copy_Asmem.partition_S(tCrA_fp16);
         auto tCrA_fp16_view = make_tensor(static_cast<decltype(tCrA_fp16)&&>(tCrA_fp16).data(),
-                                          thr_copy_store_A.layout());
-        static_assert(size(tCrA_fp16)== size(tCrA_fp16_view));
+                                          thr_copy_store_A.shape());
         copy(tiled_copy_A, tCrA_fp16_view, thr_copy_store_A);
+        barrier_wait(3);
       } else {
-        auto [k, n] = idx2crd(logic_sg_id, make_shape(inner_loop_k, ATOM_N));
+        barrier_arrive(3);
+        auto [k, n] = idx2crd(logic_sg_id, make_shape(inner_loop_k, ATOM_N), make_stride(4,1));
         copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile * inner_loop_k + k), tBrB);
         convert_FP8_to_FP16<ElementB>(tCrB, tCrB_fp16);
-        Tensor thr_copy_store_B = thr_copy_Bsmem.partition_D(SBTensor(_,_,k,n));
+        Tensor thr_copy_store_B = thr_copy_Bsmem.partition_D(sB(_,_,k,n));
         // Tensor tCrB_fp16_view = thr_copy_Bsmem.partition_S(tCrB_fp16);
         auto tCrB_fp16_view = make_tensor(static_cast<decltype(tCrB_fp16)&&>(tCrB_fp16).data(),
-                                          thr_copy_store_B.layout());
+                                          thr_copy_store_B.shape());
         copy(tiled_copy_B, tCrB_fp16_view, thr_copy_store_B);
+        barrier_wait(3);
       }
 
-      if (prefetch_k < k_tile_count) {
-        prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
-        prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
-        prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k+1));
-        prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k+1));
-      }
+      // if (prefetch_k < k_tile_count) {
+      //   prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
+      //   prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
+      //   prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k+1));
+      //   prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k+1));
+      // }
       barrier_wait(barrier_scope);
+  
+      auto [m, n] = idx2crd(sg_id, make_shape(4, 4), make_stride(4, 1));
+      Tensor thr_copy_load_A =  thr_copy_Asmem.partition_S(sA(_,_,m,0));
+      auto tCrA_fp16_view = make_tensor(static_cast<decltype(tCrA_fp16)&&>(tCrA_fp16).data(),
+                                        thr_copy_load_A.shape());
+      Tensor thr_copy_load_B =  thr_copy_Bsmem.partition_S(sB(_,_,0,n));
+      auto tCrB_fp16_view = make_tensor(static_cast<decltype(tCrB_fp16)&&>(tCrB_fp16).data(),
+                                        thr_copy_load_B.shape());
       
       CUTLASS_PRAGMA_UNROLL
-      for(int k = 0; k < inner_loop_k; k++) {
-        barrier_arrive(barrier_scope);
-        auto [m, n] = idx2crd(sg_id, make_shape(ATOM_M, ATOM_N), make_stride(ATOM_N, 1));
-        Tensor thr_copy_load_A =  thr_copy_Asmem.partition_S(SATensor(_,_,m,k));
-        auto tCrA_fp16_view = make_tensor(static_cast<decltype(tCrA_fp16)&&>(tCrA_fp16).data(),
-                                          thr_copy_load_A.layout());
+      for(int k = inner_loop_k - 1; k > -1; k--) {
+        barrier_arrive(3);
+        Tensor thr_copy_load_A =  thr_copy_Asmem.partition_S(sA(_,_,m,k));
+        Tensor thr_copy_load_B =  thr_copy_Bsmem.partition_S(sB(_,_,k,n));
         copy(tiled_copy_A, thr_copy_load_A, tCrA_fp16_view);
-        Tensor thr_copy_load_B =  thr_copy_Bsmem.partition_S(SBTensor(_,_,k,n));
-        auto tCrB_fp16_view = make_tensor(static_cast<decltype(tCrB_fp16)&&>(tCrB_fp16).data(),
-                                          thr_copy_load_B.layout());
         copy(tiled_copy_B, thr_copy_load_B, tCrB_fp16_view);
-        barrier_wait(barrier_scope);
+        barrier_wait(3);
+        if(cute::thread(0, 0)) {
+        //   print("\n======================================A register start ===============================\n");
+        //   for(size_t i = 0; i < size(thr_copy_load_A); i++){
+        //     print("%4.0f ", static_cast<float>(thr_copy_load_A[i]));
+        //   }
+        //   print("\n");
+        //   for(size_t i =0; i < size(tCrA_fp16_view); i++) {
+        //     print("%4.0f ", static_cast<float>(tCrA_fp16_view[i]));
+        //   }
+        //   print("\n======================================A register end ===============================\n");
+        //   print("\n");
+        //   print("\n======================================B register start ===============================\n");
+        //   for(size_t i = 0; i < size(thr_copy_load_B); i++){
+        //     print("%4.0f ", static_cast<float>(thr_copy_load_B[i]));
+        //   }
+        //   print("\n");
+          // for(size_t i =0; i < 1; i++) {
+          //   print("%4.0f ", static_cast<float>(tCrB_fp16_view[i]));
+          // }
+          print("");
+        //   print("\n======================================B register end ===============================\n");
+        }
+        
         cute::gemm(tiled_mma, tCrA_fp16, tCrB_fp16, accum);
       }
     }
+  #if 0
+  if(cute::thread(32, 0)) {
+    print("\n");
+    print("==================== A matrix =====================================\n");
+    for(int j = 0; j < 64; j++) {
+        print("%4.0f ", static_cast<float>(j));
+    }
+    print("\n\n");
+    // for(int l = 0; l < inner_loop_k; l++){
+    //   for(int m = 0; m < ATOM_M; m++){
+    //     print("-------block------\n");
+    //     for (int i = 0; i < 16; i++) {
+    //       for (int j = 0; j < 64; j++) {
+    //         if (static_cast<half_t>(mainloop.ptr_A[(j % 32 + m * 32) * 64 + i +  (j / 32) * 16 + l * 32]) !=
+    //            (sA(i, j, m, l)))
+    //         print("%4.0f ", static_cast<float>(mainloop.ptr_A[(j + m * 32) * 64 + i +  (j / 32) * 16 + l * 32])); 
+    //       }
+    //       print("\n");
+    //     }
+    //   }
+    // }
+    print("===================== B matrix  ==================================\n");
+    for(int n = 0; n < ATOM_N; n++){
+      for(int k = 0; k < inner_loop_k; k++){
+        print("-------block------\n");
+        for (int i = 0; i < 16; i++) {
+          for (int j = 0; j < 64; j++) {
+            if (static_cast<half_t>(mainloop.ptr_B[(j % 32 + k * 32) * 128 + i +  (j / 32) * 16 + n * 32]) !=
+               (sB(i, j, k, n)))
+            print("%4.0f ", static_cast<float>(mainloop.ptr_B[(j % 32 + k * 32) * 128 + i +  (j / 32) * 16 + n * 32])); 
+          }
+          print("\n");
+        }
+      }
+    }
+
+  }
+  #endif
   }
 };
 
