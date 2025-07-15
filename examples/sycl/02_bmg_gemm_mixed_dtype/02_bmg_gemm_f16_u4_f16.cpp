@@ -115,8 +115,8 @@ struct Options {
       return;
     }
 
-    cmd.get_cmd_line_argument("m", m, 5120);
-    cmd.get_cmd_line_argument("n", n, 4096);
+    cmd.get_cmd_line_argument("m", m, 32);
+    cmd.get_cmd_line_argument("n", n, 14336);
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("g", g, 128);
@@ -630,14 +630,14 @@ int main(int argc, const char** argv) {
   using StrideZero = cute::Stride<_8, cute::Stride<_1, int64_t>, int64_t>; // int4_t zero point packed 8 elements along K dimension and then along N dimension
 
   using GmemTiledCopyA = XE_2D_U4x32x16_LD_T;
-  using GmemTiledCopyB = XE_2D_U16x16x32_LD_N;
+  using GmemTiledCopyB = XE_2D_U16x32x32_LD_N;
 
   // Workgroup-level tile
-  using TileShape = Shape<_16, _64, _64>;
+  using TileShape = Shape<_32, _128, _32>;
 
   using TiledMma =
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
-                                    Layout<Shape<_1, _2, _1>, Stride<_2, _1, _0>>>::TiledMMA;
+                                    Layout<Shape<_1, _4, _1>, Stride<_0, _1, _0>>>::TiledMMA;
 
   constexpr int PipelineStages = 3;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<PipelineStages>;
