@@ -111,8 +111,8 @@ struct Options {
       return;
     }
 
-    cmd.get_cmd_line_argument("m", m, 5120);
-    cmd.get_cmd_line_argument("n", n, 4096);
+    cmd.get_cmd_line_argument("m", m, 32);
+    cmd.get_cmd_line_argument("n", n, 14336);
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("g", g, 128);

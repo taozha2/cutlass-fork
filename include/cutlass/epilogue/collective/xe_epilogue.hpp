@@ -407,7 +407,6 @@ public:
         cst_callbacks.begin_loop(epi_m, epi_n);
 
         if (is_C_load_needed) {
-          //cordinates for C and D are the same
           copy(params.xe_load_c, tCgC(_, epi_m, epi_n), trC);
         }
 
