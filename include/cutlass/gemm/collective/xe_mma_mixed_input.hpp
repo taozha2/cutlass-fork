@@ -820,16 +820,24 @@ public:
     const int k_start_idx = crd2idx((*k_tile_iter), make_shape(K_start));
     int prefetch_k = k_start_idx;
 
-    CUTLASS_PRAGMA_UNROLL
-    for (int i = 0; i < DispatchPolicy::Stages; i++, prefetch_k++) {
-      prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
-      prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
+    // Prefetch does not always bring benefits in all scenarios,
+    // Use "DispatchPolicy::Stages" to control whether prefetching is needed.
+    static constexpr auto prefetch_enabled = (DispatchPolicy::Stages > 0);
+
+    if constexpr (prefetch_enabled) {
+      CUTLASS_PRAGMA_UNROLL
+      for (int i = 0; i < DispatchPolicy::Stages; i++, prefetch_k++) {
+        prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
+        prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
+      }
     }
 
-    for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++, prefetch_k++) {
+    for (int k_tile = k_start_idx; k_tile < k_tile_count + k_start_idx; k_tile++) {
       constexpr int barrier_scope = 2;
 
-      barrier_arrive(barrier_scope);
+      if constexpr (prefetch_enabled) {
+        barrier_arrive(barrier_scope);
+      }
 
       // Copy gmem to rmem for the first k_tile
       copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile), frag_copy_A);
@@ -846,8 +854,11 @@ public:
         }
       }
 
-      prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
-      prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
+      if constexpr (prefetch_enabled) {
+        prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
+        prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
+        prefetch_k++;
+      }
 
       auto quant_zero = [&]() -> decltype(auto) {
         if constexpr (ModeScaleZero && sizeof_bits_v<NonVoidElementZero> < 8) {
@@ -866,7 +877,10 @@ public:
       }
 
       cute::gemm(tiled_mma, mma_A, mma_B, accum);
-      barrier_wait(barrier_scope);
+
+      if constexpr (prefetch_enabled) {
+        barrier_wait(barrier_scope);
+      }
     }
   }
 };
