@@ -2,7 +2,7 @@ script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 rm -rf ${script_dir}/.git/hooks/pre-commit
 rm -rf ${script_dir}/build && mkdir ${script_dir}/build && cd ${script_dir}/build
 
-clear
+#clear
 
 
 # ================= unset envs =================

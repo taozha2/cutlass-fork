@@ -702,7 +702,7 @@ struct ExampleRunner {
 
 };
 
-template <class layout_a, class layout_b, class copy_a, class copy_b, uint32_t wg_m, uint32_t wg_n, uint32_t sg_k, uint32_t thread_m, uint32_t thread_n>
+template <class layout_a, class layout_b, class copy_a, class copy_b, uint32_t wg_m, uint32_t wg_n, uint32_t sg_k, uint32_t thread_m, uint32_t thread_n, uint32_t stages>
 void run_int4(Options const& options) {
   // The KernelHardwareInfo struct holds the number of EUs on the GPU with a given device ID. This
   // information is used by the underlying kernel.
@@ -743,7 +743,7 @@ void run_int4(Options const& options) {
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
                                     Layout<Shape<Int<thread_m>, Int<thread_n>, _1>, Stride<Int<thread_n>, _1, _0>>>::TiledMMA;
 
-  constexpr int PipelineStages = 3;
+  constexpr int PipelineStages = stages;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
@@ -809,22 +809,22 @@ int main(int argc, const char** argv)
   options.m = 32;
   options.n = 4096;
   options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x16x32_LD_N, XE_2D_U4x32x16_LD_T, 16, 64, 128, 1, 4>(options);
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x16x32_LD_N, XE_2D_U4x32x16_LD_T, 16, 64, 128, 1, 4, 1>(options);
 
   options.m = 32;
   options.n = 14336;
   options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 128, 32, 1, 4>(options);
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 128, 32, 1, 4, 2>(options);
 
   options.m = 48;
   options.n = 4096;
   options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 64, 32, 1, 4>(options);
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 64, 32, 1, 4, 0>(options);
 
   options.m = 48;
   options.n = 14336;
   options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x16_LD_N, XE_2D_U4x16x16_LD_T, 64, 128, 16, 1, 4>(options);
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 64, 128, 32, 1, 4, 0>(options);
 
   return 0;
 }
