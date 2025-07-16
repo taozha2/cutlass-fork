@@ -72,7 +72,7 @@ target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_f16
 
 cmake .. -G Ninja -DCUTLASS_SYCL_PROFILING_ENABLED=ON -DCMAKE_CUDA_HOST_COMPILER=$clang_path -DCMAKE_CXX_FLAGS_RELEASE=$1 \
 -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
--DCMAKE_CXX_FLAGS=" -DCOMPILER_VERSION -ftarget-register-alloc-mode=pvc:auto -DSYCL_INTEL_TARGET -gline-tables-only $1 $2 $3" \
+-DCMAKE_CXX_FLAGS=" -DCUTLASS_SYCL_BUILTIN_ENABLE -DCOMPILER_VERSION -ftarget-register-alloc-mode=pvc:auto -DSYCL_INTEL_TARGET -gline-tables-only $1 $2 $3" \
 && ninja -v $target && \
 $target --m=32 --n=14336 --k=4096 --l=1 --iterations=20
 

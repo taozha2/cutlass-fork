@@ -846,10 +846,8 @@ public:
         }
       }
 
-      if(prefetch_k < k_tile_count) {
-        prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
-        prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
-      }
+      prefetch(tiled_prefetch_a, pAgA(_,_,_,prefetch_k));
+      prefetch(tiled_prefetch_b, pBgB(_,_,_,prefetch_k));
 
       auto quant_zero = [&]() -> decltype(auto) {
         if constexpr (ModeScaleZero && sizeof_bits_v<NonVoidElementZero> < 8) {
