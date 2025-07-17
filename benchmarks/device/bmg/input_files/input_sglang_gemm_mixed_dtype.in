@@ -3,4 +3,4 @@
 #############################################################################
 
 # int4
-PvcMixedPrecisionGemmFP16U4FP16F16FP16U4_RCR_1 --bm_name=mixed_dtype_int4 --m=32 --k=4096 --n=14336 --batch=1
+PvcMixedPrecisionGemmFP16U4FP16F16FP16U4_RCR_1 --bm_name=mixed_dtype_int4 --m=32 --k=4096 --n=14336 --l=1

@@ -174,7 +174,7 @@ struct BenchmarkRunnerGemm {
   using FusionDeEltMul = cutlass::epilogue::fusion::LinCombDeEltAct<LayoutC, std::multiplies,
                                                                     ElementOutput, ElementCompute>;
   using FusionLinComb = epilogue::fusion::LinearCombination<
-      ElementOutput, ElementCompute, ElementAccumulator, ElementAccumulator,
+      ElementAccumulator, ElementCompute, ElementAccumulator, ElementAccumulator,
       FloatRoundStyle::round_to_nearest>;
 
   // Epilogue used in ampere/gemm_configuration.hpp
@@ -359,6 +359,8 @@ struct BenchmarkRunnerGemm {
     } else {
       static_assert(!Gemm::GemmKernel::CollectiveMainloop::IsATransformed);
 
+      using ElementScale = Gemm::GemmKernel::CollectiveMainloop::ElementScale;
+      using ElementZero = Gemm::GemmKernel::CollectiveMainloop::ElementZero;
       using StrideS = Gemm::GemmKernel::CollectiveMainloop::StrideScale;
       using StrideZ = Gemm::GemmKernel::CollectiveMainloop::StrideZero;
 
@@ -396,7 +398,7 @@ struct BenchmarkRunnerGemm {
       initialize_zero(block_zero);
 
       arguments.mainloop = {block_A[0].get(), stride_A, block_B[0].get(), stride_B, block_scale.get(),
-              stride_S,  block_zero.get(), stride_Z, 128};
+              stride_S, block_zero.get(), stride_Z, 128};
     }
 
     arguments.epilogue = {{options.alpha, options.beta}, block_C[0].get(), stride_C, block_D.get(), stride_D};

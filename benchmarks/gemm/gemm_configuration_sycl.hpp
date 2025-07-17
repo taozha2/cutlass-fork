@@ -214,11 +214,12 @@ struct MixedPrecisionGemmConfiguration<
           void, void>;
 
   using CollectiveMainloop = collective::CollectiveMma<
-      GEMMDispatchPolicy, TileShape, ElementA, LayoutA, cute::tuple<ElementB, ElementScale, StrideS, ElementZero, StrideZ>, LayoutB, TiledMma,
+      GEMMDispatchPolicy, TileShape, ElementA, cutlass::gemm::TagToStrideA_t<LayoutA>,
+      cute::tuple<ElementB, ElementScale, StrideS, ElementZero, StrideZ>, cutlass::gemm::TagToStrideB_t<LayoutB>, TiledMma,
       GmemTiledCopyA, void, void, cute::identity, GmemTiledCopyB, void, void,
       cute::identity>;
 
-  using GemmKernel = kernel::GemmUniversal<Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue>;
+  using GemmKernel = kernel::GemmUniversal<Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue, void>;
 
   using Gemm = device::GemmUniversalAdapter<GemmKernel>;
 
