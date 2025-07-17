@@ -159,4 +159,71 @@ struct GemmConfiguration<
   }
 };
 
+template<class ElementA, class LayoutA,
+  class ElementB, class LayoutB, class ElementC, typename LayoutC,
+  class ElementScale, typename StrideS,
+  class ElementZero, typename StrideZ,
+  class TileShape, Scheduler TileScheduler,
+  class TiledMma, class GmemTiledCopyA, class GmemTiledCopyB,
+  class GmemTiledCopyC,   class EpilogueOp, int Stages>
+struct MixedPrecisionGemmConfiguration<
+      arch::IntelXe,
+      ElementA, LayoutA,
+      ElementB, LayoutB,
+      ElementC, LayoutC,
+      ElementScale, LayoutScale,
+      ElementZero, LayoutZero,
+      TileShape, TileScheduler, TiledMma,
+      GmemTiledCopyA, GmemTiledCopyB,
+      GmemTiledCopyC, EpilogueOp, Stages>
+{
+  using LayoutD = LayoutC;
+
+  using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<Stages>;
+  using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
+
+  using ElementAccumulator = typename TiledMma::ValTypeD;
+
+  using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
+          decltype(tile_shape(TiledMma()))>;
+  using CollectiveEpilogue = cutlass::epilogue::collective::CollectiveEpilogue<
+          EpilogueDispatchPolicy,
+          TileShape,
+          ElementAccumulator,
+          cutlass::gemm::TagToStrideC_t<LayoutC>,
+          ElementC,
+          cutlass::gemm::TagToStrideC_t<LayoutD>,
+          FusionCallBacks,
+          XE_2D_U32x8x16_LD_N,
+          void, void,
+          GmemTiledCopyC>,
+          void, void>;
+
+  using CollectiveMainloop = collective::CollectiveMma<
+      DispatchPolicy, TileShape, ElementA, LayoutA, ElementB, LayoutB, TiledMMA,
+      GmemTiledCopyA, void, void, cute::identity, GmemTiledCopyB, void, void,
+      cute::identity>;
+
+  using GemmKernel = kernel::GemmUniversal<Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue>;
+
+  using Gemm = device::GemmUniversalAdapter<GemmKernel>;
+
+  constexpr static typename GemmKernel::Arguments defaultArguments() {
+    using StreamKMode =
+      cutlass::gemm::kernel::detail::PersistentTileSchedulerXeStreamKParams::DecompositionMode;
+    if constexpr (TileScheduler == Scheduler::Gemm) {
+      return {};
+    } else if constexpr (TileScheduler == Scheduler::GemmStreamK) {
+      typename GemmKernel::Arguments arguments{};
+      arguments.scheduler = {1, StreamKMode::StreamK};
+      return arguments;
+    } else {
+      static_assert(TileScheduler == Scheduler::GemmSplitK);
+      typename GemmKernel::Arguments arguments{};
+      arguments.scheduler = {2, StreamKMode::SplitK};
+      return arguments;
+    }
+  }
+};
+
 } // namespace cutlass::gemm::device
