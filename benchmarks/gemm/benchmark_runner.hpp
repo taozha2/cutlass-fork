@@ -60,6 +60,12 @@ namespace cutlass::benchmark {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+template <class T, int Stages = 0>
+static constexpr auto is_mixed_dtype = false;
+
+template <int Stages>
+static constexpr auto is_mixed_dtype<cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<Stages>> = true;
+
 /// Helper to initialize a block of device data
 template <class Element>
 bool initialize_block(
@@ -269,6 +275,28 @@ struct BenchmarkRunnerGemm {
     return passed;
   }
 
+    template <class Element>
+  bool initialize_scale(cutlass::DeviceAllocation<Element>& block) {
+    float elt_max_f = float(cutlass::platform::numeric_limits<Element>::max());
+    const float max_dequant_val = 4.f;
+    const float min_dequant_val = 0.5f;
+
+    float scope_max(max_dequant_val / elt_max_f);
+    float scope_min(min_dequant_val / elt_max_f);
+
+    cutlass::reference::device::BlockFillRandomUniform(
+      block.get(), block.size(), seed, Element(scope_max), Element(scope_min));
+
+    return true;
+  }
+
+  template <class Element>
+  bool initialize_zero(cutlass::DeviceAllocation<Element>& block) {
+      cutlass::reference::device::BlockFillRandomUniform(
+        block.get(), block.size(), seed, Element(2.0f), Element(-2.0f));
+    return true;
+  }
+
   /// Initialize operands to be used in the GEMM and reference GEMM
   void initialize(::benchmark::State& state, const ProblemShapeType& problem_size) {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
@@ -325,7 +353,52 @@ struct BenchmarkRunnerGemm {
     typename Gemm::GemmKernel::Arguments arguments = GemmConfiguration::defaultArguments();
     arguments.mode = gemm::GemmUniversalMode::kGemm;
     arguments.problem_shape = problem_size;
-    arguments.mainloop = {block_A[0].get(), stride_A, block_B[0].get(), stride_B};
+
+    if constexpr (!is_mixed_dtype<typename Gemm::GemmKernel::CollectiveMainloop::DispatchPolicy>) {
+      arguments.mainloop = {block_A[0].get(), stride_A, block_B[0].get(), stride_B};
+    } else {
+      static_assert(!Gemm::GemmKernel::CollectiveMainloop::IsATransformed);
+
+      using StrideS = Gemm::GemmKernel::CollectiveMainloop::StrideScale;
+      using StrideZ = Gemm::GemmKernel::CollectiveMainloop::StrideZero;
+
+      auto dq_mn_size = options.n;
+      auto scale_k = options.k / 128;
+
+      static constexpr auto zero_elements_packed_along_k = Gemm::GemmKernel::CollectiveMainloop::zero_elements_packed_along_k;
+      static constexpr auto is_tuple_z = is_tuple_v<std::remove_reference_t<decltype(cute::get<1>(StrideZ{}))>>;
+
+      auto shape_scale = cute::make_shape(dq_mn_size, scale_k, options.l);
+      auto shape_zero = [&]() {
+        if constexpr (is_tuple_z) {
+          return cute::make_shape(dq_mn_size, cute::make_shape(zero_elements_packed_along_k, cute::max(1, scale_k / zero_elements_packed_along_k)), options.l);
+        } else {
+          return shape_scale;
+        }
+      }();
+
+      auto stride_S = cutlass::make_cute_packed_stride(StrideS{}, shape_scale);
+      auto stride_Z = [&]() {
+        if constexpr (is_tuple_z) {
+          return make_stride(Int<zero_elements_packed_along_k>{}, make_stride(_1{}, int64_t(zero_elements_packed_along_k * dq_mn_size)), int64_t(dq_mn_size * scale_k));
+        } else {
+          return stride_S;
+        }
+      }();
+
+      cutlass::DeviceAllocation<ElementScale> block_scale;
+      cutlass::DeviceAllocation<ElementZero> block_zero;
+
+      block_scale.reset(static_cast<std::size_t>(scale_k) * options.l * dq_mn_size);
+      block_zero.reset(static_cast<std::size_t>(scale_k) * options.l * dq_mn_size);
+
+      initialize_scale(block_scale);
+      initialize_zero(block_zero);
+
+      arguments.mainloop = {block_A[0].get(), stride_A, block_B[0].get(), stride_B, block_scale.get(),
+              stride_S,  block_zero.get(), stride_Z, 128};
+    }
+
     arguments.epilogue = {{options.alpha, options.beta}, block_C[0].get(), stride_C, block_D.get(), stride_D};
     arguments.hw_info = hw_info;
 

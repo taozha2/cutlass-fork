@@ -66,6 +66,19 @@ struct GemmConfiguration {
   static_assert(sizeof(ElementA) == 0, "No valid GemmConfiguration configuration exists.");
 };
 
+template<
+  class ArchTag,
+  class ElementA, class LayoutA,
+  class ElementB, class LayoutB, class ElementC, typename LayoutC,
+  class ElementScale, typename StrideS,
+  class ElementZero, typename StrideZ,
+  class TileShape, Scheduler TileScheduler,
+  class TiledMma, class GmemTiledCopyA, class GmemTiledCopyB,
+  class GmemTiledCopyC,   class EpilogueOp, int Stages = 3>
+struct MixedPrecisionGemmConfiguration{
+  static_assert(sizeof(ElementA) == 0, "No valid MixedPrecisionGemmConfiguration configuration exists.");
+};
+
 /////////////////////////////////////////////////////////////////////////
 
 // bfloat16
@@ -160,19 +173,20 @@ struct GemmConfiguration<
 };
 
 template<class ElementA, class LayoutA,
-  class ElementB, class LayoutB, class ElementC, typename LayoutC,
+  class ElementB, class LayoutB,
+  class ElementC, typename LayoutC,
   class ElementScale, typename StrideS,
   class ElementZero, typename StrideZ,
   class TileShape, Scheduler TileScheduler,
   class TiledMma, class GmemTiledCopyA, class GmemTiledCopyB,
-  class GmemTiledCopyC,   class EpilogueOp, int Stages>
+  class GmemTiledCopyC, class EpilogueOp, int Stages>
 struct MixedPrecisionGemmConfiguration<
       arch::IntelXe,
       ElementA, LayoutA,
       ElementB, LayoutB,
       ElementC, LayoutC,
-      ElementScale, LayoutScale,
-      ElementZero, LayoutZero,
+      ElementScale, StrideS,
+      ElementZero, StrideZ,
       TileShape, TileScheduler, TiledMma,
       GmemTiledCopyA, GmemTiledCopyB,
       GmemTiledCopyC, EpilogueOp, Stages>
@@ -196,11 +210,11 @@ struct MixedPrecisionGemmConfiguration<
           FusionCallBacks,
           XE_2D_U32x8x16_LD_N,
           void, void,
-          GmemTiledCopyC>,
+          GmemTiledCopyC,
           void, void>;
 
   using CollectiveMainloop = collective::CollectiveMma<
-      DispatchPolicy, TileShape, ElementA, LayoutA, ElementB, LayoutB, TiledMMA,
+      GEMMDispatchPolicy, TileShape, ElementA, LayoutA, cute::tuple<ElementB, ElementScale, StrideS, ElementZero, StrideZ>, LayoutB, TiledMma,
       GmemTiledCopyA, void, void, cute::identity, GmemTiledCopyB, void, void,
       cute::identity>;
 

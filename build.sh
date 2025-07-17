@@ -2,7 +2,7 @@ script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 rm -rf ${script_dir}/.git/hooks/pre-commit
 rm -rf ${script_dir}/build && mkdir ${script_dir}/build && cd ${script_dir}/build
 
-#clear
+clear
 
 
 # ================= unset envs =================
@@ -65,8 +65,8 @@ export OCL_ICD_VENDORS=$HOME
 
 # ================= target =================
 #target=./test/unit/cute/intel_xe/cutlass_test_unit_cute_intel_xe
-target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8_bf16
-target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_f16
+#target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8_bf16
+#target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_f16
 #target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_s8_f16_tensorwise
 #target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_s8
 target=./benchmarks/gemm/cutlass_benchmarks_gemm_sycl
@@ -75,7 +75,9 @@ cmake .. -G Ninja -DCUTLASS_SYCL_PROFILING_ENABLED=ON -DCMAKE_CUDA_HOST_COMPILER
 -DCUTLASS_ENABLE_SYCL=ON -DDPCPP_SYCL_TARGET=$output -DCMAKE_CXX_COMPILER=$clang_path \
 -DCMAKE_CXX_FLAGS=" -DCUTLASS_SYCL_BUILTIN_ENABLE -DCOMPILER_VERSION -ftarget-register-alloc-mode=pvc:auto -DSYCL_INTEL_TARGET -gline-tables-only $1 $2 $3" \
 && ninja -v $target && \
-$target --m=32 --n=14336 --k=4096 --l=1 --iterations=20
+./benchmarks/gemm/cutlass_benchmarks_gemm --config_file=../benchmarks/device/bmg/input_files/input_sglang_gemm_mixed_dtype.in
+#$target --m=32 --n=14336 --k=4096 --l=1 --iterations=20
+
 
 # -gline-tables-only
 
