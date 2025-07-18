@@ -66,6 +66,42 @@ static constexpr auto is_mixed_dtype = false;
 template <int Stages>
 static constexpr auto is_mixed_dtype<cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<Stages>> = true;
 
+template <class T, class = void>
+struct ScaleType {
+  using type = int;
+};
+template <class T>
+struct ScaleType<T, cute::void_t<typename T::ElementScale>> {
+  using type = typename T::ElementScale;
+};
+
+template <class T, class = void>
+struct ZeroType {
+  using type = int;
+};
+template <class T>
+struct ZeroType<T, cute::void_t<typename T::ElementZero>> {
+  using type = typename T::ElementZero;
+};
+
+template <class T, class = void>
+struct ScaleStride {
+  using type = int;
+};
+template <class T>
+struct ScaleStride<T, cute::void_t<typename T::StrideScale>> {
+  using type = typename T::StrideScale;
+};
+
+template <class T, class = void>
+struct ZeroStride {
+  using type = int;
+};
+template <class T>
+struct ZeroStride<T, cute::void_t<typename T::StrideZero>> {
+  using type = typename T::StrideZero;
+};
+
 /// Helper to initialize a block of device data
 template <class Element>
 bool initialize_block(
@@ -156,6 +192,15 @@ struct BenchmarkRunnerGemm {
   using ElementB = typename Gemm::ElementB;
   using ElementAcc = typename Gemm::ElementAccumulator;
 
+  using CollectiveMainloop = typename Gemm::GemmKernel::CollectiveMainloop;
+  using DispatchPolicy = typename CollectiveMainloop::DispatchPolicy;
+  using ElementMma = CollectiveMainloop::TiledMma::ValTypeA;
+
+  using ElementScale = ScaleType<CollectiveMainloop>::type;
+  using ElementZero = ZeroType<CollectiveMainloop>::type;
+  using StrideS = ScaleStride<CollectiveMainloop>::type;
+  using StrideZ = ZeroStride<CollectiveMainloop>::type;
+
   using CollectiveEpilogue = typename Gemm::CollectiveEpilogue;
   using ElementC = typename Gemm::ElementC;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
@@ -207,6 +252,10 @@ struct BenchmarkRunnerGemm {
   StrideC stride_C;
   StrideD stride_D;
 
+  StrideS stride_S;
+  StrideZ stride_Z;
+
+
   uint64_t seed;
 
   std::vector<DeviceAllocation<ElementA>> block_A;
@@ -216,19 +265,142 @@ struct BenchmarkRunnerGemm {
   DeviceAllocation<ElementOutput> block_ref_D;
   std::vector<DeviceAllocation<ElementOutput>> block_Aux;
 
+  cutlass::DeviceAllocation<ElementScale> block_scale;
+  cutlass::DeviceAllocation<ElementZero> block_zero;
+
+  DeviceAllocation<ElementMma> block_A_verify;
+  DeviceAllocation<ElementMma> block_B_verify;
+
   BenchmarkRunnerGemm() : seed(0) {};
 
   //
   // Methods
   //
 
+  template <
+  class QuantizedElement,
+  class DequantizedElement,
+  class OperandLayout,
+  class ElementScale,
+  class ElementZero,
+  class ScaleLayout,
+  class ZeroLayout>
+  static auto dequantize_B(DequantizedElement* dq_buffer,
+                       QuantizedElement const* q_buffer,
+                       OperandLayout const operand_layout,
+                       ElementScale const* scale_buffer,
+                       ElementZero const* zero_buffer,
+                       ScaleLayout const scale_layout,
+                       ZeroLayout const zero_layout,
+                       int const group_size) {
+    std::vector<uint8_t> dst(size(operand_layout) * sizeof_bits_v<DequantizedElement> / 8, 0);
+    cutlass::device_memory::copy_to_host(dst.data(), (uint8_t*)dq_buffer, dst.size());
+
+    std::vector<uint8_t> src(size(operand_layout) * sizeof_bits_v<QuantizedElement> / 8, 0);
+    cutlass::device_memory::copy_to_host(src.data(), (uint8_t*)q_buffer, src.size());
+
+    std::vector<uint8_t> scale(size(scale_layout) * sizeof_bits_v<ElementScale> / 8, 0);
+    cutlass::device_memory::copy_to_host(scale.data(), (uint8_t*)scale_buffer, scale.size());
+
+    std::vector<uint8_t> zero(size(zero_layout) * sizeof_bits_v<ElementZero> / 8, 0);
+    cutlass::device_memory::copy_to_host(zero.data(), (uint8_t*)zero_buffer, zero.size());
+
+    syclcompat::wait();
+
+    auto dst_tensor = make_tensor(make_gmem_ptr(reinterpret_cast<DequantizedElement*>(dst.data())), operand_layout);
+
+    auto src_tensor = [&]() {
+      if constexpr (sizeof_bits_v<QuantizedElement> < 8) {
+        return make_tensor(cute::subbyte_iterator<const QuantizedElement>(src.data()), operand_layout);
+      } else {
+        return make_tensor(make_gmem_ptr(reinterpret_cast<QuantizedElement const *>(src.data())), operand_layout);
+      }
+    }();
+
+    auto scale_tensor = make_tensor(make_gmem_ptr(reinterpret_cast<ElementScale const *>(scale.data())), scale_layout);
+
+    auto zero_tensor = [&]() {
+      if constexpr (sizeof_bits_v<ElementZero> < 8) {
+        auto flatten_tensor = flatten(make_tensor(cute::subbyte_iterator<const ElementZero>(zero.data()), zero_layout));
+        static_assert(rank(flatten_tensor.layout()) == 4);
+        return make_tensor(flatten_tensor.data(), select<1, 0, 2, 3>(flatten_tensor.layout()));
+      } else {
+        return make_tensor(make_gmem_ptr(reinterpret_cast<ElementZero const *>(zero.data())), zero_layout);
+      }
+    }();
+
+    auto N = size<0>(src_tensor);
+    auto K = size<1>(src_tensor);
+    auto L = size<2>(src_tensor);
+
+    for (int l = 0; l < L; l++) {
+      for (int k= 0; k < K; k++) {
+        for (int n = 0; n < N; n++) {
+          using ret_type = cute::conditional_t<sizeof_bits_v<ElementZero> >= 8, ElementZero, int8_t>;
+          ret_type a = [&]() {
+            if constexpr (sizeof_bits_v<QuantizedElement> >= 8) {
+              return  (ret_type)(src_tensor(n, k, l));
+            } else {
+              return (ret_type)(src_tensor(n, k, l).get());
+            }}();
+
+          ret_type b = [&]() {
+            if constexpr (sizeof_bits_v<ElementZero> >= 8) {
+              return (ret_type)(zero_tensor(n, k / group_size, l));
+            } else {
+              auto k_packed = get<0>(zero_tensor.shape());
+              return (ret_type)(zero_tensor((k / group_size) % k_packed, n, k / group_size / k_packed, l).get());
+            }
+          }();
+
+          dst_tensor(n, k, l) = ((ElementScale)(a - b)) * scale_tensor(n, k / group_size, l);
+        }
+      }
+    }
+
+    cutlass::device_memory::copy_to_device(dq_buffer, (DequantizedElement*)(raw_pointer_cast(dst_tensor.data())), dst_tensor.size());
+    syclcompat::wait();
+    return dq_buffer;
+  }
+
   bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
     auto [M, N, K, L] = problem_size;
 
-    TensorRef ref_A(block_A[0].get(), LayoutA::packed({M, K}));
-    TensorRef ref_B(block_B[0].get(), LayoutB::packed({K, N}));
     TensorRef ref_C(block_C[0].get(), LayoutC::packed({M, N}));
     TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
+
+    auto ptr_A = [&]() {
+      if constexpr (cute::is_same_v<ElementMma, ElementA>) {
+        return block_A[0].get();
+      } else {
+        // TODO:
+      }
+    }();
+
+    auto ptr_B = [&]() {
+      if constexpr (cute::is_same_v<ElementMma, ElementB>) {
+        return block_B[0].get();
+      } else {
+        auto shape_B = cute::make_shape(N, K, L);
+        auto shape_scale = cute::make_shape(N, K / 128, L);
+        static constexpr auto k_packed = CollectiveMainloop::zero_elements_packed_along_k;
+        auto shape_zero = [&]() {
+          if constexpr (is_tuple_v<std::remove_reference_t<decltype(cute::get<1>(stride_Z))>>) {
+            return cute::make_shape(N, cute::make_shape(k_packed,
+                                                        cute::max(1, K / 128 / k_packed)), L);
+          } else {
+            return shape_scale;
+          }
+        }();
+
+        block_B_verify.reset(block_B[0].size());
+        return dequantize_B(block_B_verify.get(), block_B[0].get(), make_layout(shape_B, stride_B), block_scale.get(),
+                            block_zero.get(), make_layout(shape_scale, stride_S), make_layout(shape_zero, stride_Z), 128);
+      }
+    }();
+
+    TensorRef ref_A(ptr_A, LayoutA::packed({M, K}));
+    TensorRef ref_B(ptr_B, LayoutB::packed({K, N}));
 
     reference::device::GemmComplex(
             {M, N, K},
@@ -315,6 +487,33 @@ struct BenchmarkRunnerGemm {
                                    (size_C * sizeof(ElementC));
     count = std::ceil(static_cast<float>(cutlass::get_llc_size()) / static_cast<float>(mem_occupied_ABC)) + 1;
 
+    if constexpr (is_mixed_dtype<DispatchPolicy>) {
+      static_assert(!CollectiveMainloop::IsATransformed);
+
+      auto dq_mn_size = N;
+      auto scale_k = K / 128;
+
+      static constexpr auto k_packed = CollectiveMainloop::zero_elements_packed_along_k;
+      static constexpr auto is_tuple_z = is_tuple_v<std::remove_reference_t<decltype(cute::get<1>(StrideZ{}))>>;
+
+      auto shape_scale = cute::make_shape(dq_mn_size, scale_k, L);
+
+      stride_S = cutlass::make_cute_packed_stride(StrideS{}, shape_scale);
+      stride_Z = [&]() {
+        if constexpr (is_tuple_z) {
+          return make_stride(Int<k_packed>{}, make_stride(_1{}, int64_t(k_packed * dq_mn_size)), int64_t(dq_mn_size * scale_k));
+        } else {
+          return stride_S;
+        }
+      }();
+
+      block_scale.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
+      block_zero.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
+
+      initialize_scale(block_scale);
+      initialize_zero(block_zero);
+    }
+
     for(int i=0; i < count; i++) {
       block_A.emplace_back();
       block_B.emplace_back();
@@ -354,49 +553,9 @@ struct BenchmarkRunnerGemm {
     arguments.mode = gemm::GemmUniversalMode::kGemm;
     arguments.problem_shape = problem_size;
 
-    if constexpr (!is_mixed_dtype<typename Gemm::GemmKernel::CollectiveMainloop::DispatchPolicy>) {
+    if constexpr (!is_mixed_dtype<DispatchPolicy>) {
       arguments.mainloop = {block_A[0].get(), stride_A, block_B[0].get(), stride_B};
     } else {
-      static_assert(!Gemm::GemmKernel::CollectiveMainloop::IsATransformed);
-
-      using ElementScale = Gemm::GemmKernel::CollectiveMainloop::ElementScale;
-      using ElementZero = Gemm::GemmKernel::CollectiveMainloop::ElementZero;
-      using StrideS = Gemm::GemmKernel::CollectiveMainloop::StrideScale;
-      using StrideZ = Gemm::GemmKernel::CollectiveMainloop::StrideZero;
-
-      auto dq_mn_size = options.n;
-      auto scale_k = options.k / 128;
-
-      static constexpr auto zero_elements_packed_along_k = Gemm::GemmKernel::CollectiveMainloop::zero_elements_packed_along_k;
-      static constexpr auto is_tuple_z = is_tuple_v<std::remove_reference_t<decltype(cute::get<1>(StrideZ{}))>>;
-
-      auto shape_scale = cute::make_shape(dq_mn_size, scale_k, options.l);
-      auto shape_zero = [&]() {
-        if constexpr (is_tuple_z) {
-          return cute::make_shape(dq_mn_size, cute::make_shape(zero_elements_packed_along_k, cute::max(1, scale_k / zero_elements_packed_along_k)), options.l);
-        } else {
-          return shape_scale;
-        }
-      }();
-
-      auto stride_S = cutlass::make_cute_packed_stride(StrideS{}, shape_scale);
-      auto stride_Z = [&]() {
-        if constexpr (is_tuple_z) {
-          return make_stride(Int<zero_elements_packed_along_k>{}, make_stride(_1{}, int64_t(zero_elements_packed_along_k * dq_mn_size)), int64_t(dq_mn_size * scale_k));
-        } else {
-          return stride_S;
-        }
-      }();
-
-      cutlass::DeviceAllocation<ElementScale> block_scale;
-      cutlass::DeviceAllocation<ElementZero> block_zero;
-
-      block_scale.reset(static_cast<std::size_t>(scale_k) * options.l * dq_mn_size);
-      block_zero.reset(static_cast<std::size_t>(scale_k) * options.l * dq_mn_size);
-
-      initialize_scale(block_scale);
-      initialize_zero(block_zero);
-
       arguments.mainloop = {block_A[0].get(), stride_A, block_B[0].get(), stride_B, block_scale.get(),
               stride_S, block_zero.get(), stride_Z, 128};
     }
