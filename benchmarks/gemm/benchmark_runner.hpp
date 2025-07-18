@@ -483,8 +483,8 @@ struct BenchmarkRunnerGemm {
     std::size_t size_A = cute::cosize(make_layout(cute::make_shape(M, K, L), stride_A));
     std::size_t size_B = cute::cosize(make_layout(cute::make_shape(N, K, L), stride_B));
     std::size_t size_C = cute::cosize(make_layout(cute::make_shape(M, N, L), stride_C));
-    std::size_t mem_occupied_ABC = (size_A * sizeof(ElementA)) + (size_B * sizeof(ElementB)) + 
-                                   (size_C * sizeof(ElementC));
+    std::size_t mem_occupied_ABC = ((size_A * sizeof_bits_v<ElementA>) + (size_B * sizeof_bits_v<ElementB>) +
+                                   (size_C * sizeof_bits_v<ElementC>)) / sizeof_bits_v<int8_t>;
     count = std::ceil(static_cast<float>(cutlass::get_llc_size()) / static_cast<float>(mem_occupied_ABC)) + 1;
 
     if constexpr (is_mixed_dtype<DispatchPolicy>) {
@@ -628,10 +628,10 @@ struct BenchmarkRunnerGemm {
 
     auto gflop = 2.0 * options.m * options.n * options.k * options.l * 1e-9;
     auto mega_bytes_transferred = static_cast<double>(
-        options.m * options.k * sizeof(ElementA) +
-        options.k * options.n * sizeof(ElementB) +
-        (options.beta != 0 ? 2 : 1) * options.m * options.n * sizeof(ElementC)
-      ) * 1e-6 * options.l;
+        options.m * options.k * sizeof_bits_v<ElementA> +
+        options.k * options.n * sizeof_bits_v<ElementB> +
+        (options.beta != 0 ? 2 : 1) * options.m * options.n * sizeof_bits_v<ElementC>
+      ) * 1e-6 * options.l / sizeof_bits_v<int8_t>;
 
     initialize_counters(state);
     int32_t counter = 1;
@@ -645,6 +645,10 @@ struct BenchmarkRunnerGemm {
         {{options.alpha, options.beta}, block_C[input_num].get(), stride_C, block_D.get(), stride_D},
         hw_info
       };
+      if constexpr (is_mixed_dtype<DispatchPolicy>) {
+        arguments.mainloop = {block_A[input_num].get(), stride_A, block_B[input_num].get(), stride_B, block_scale.get(),
+                stride_S, block_zero.get(), stride_Z, 128};
+      }
       if constexpr(epi_is_deeltactmul){
         arguments.epilogue.thread.aux_ptr = block_Aux[input_num].get();
         arguments.epilogue.thread.dAux = cutlass::make_cute_packed_stride(StrideD{}, cute::make_shape(options.m, options.n, options.l));
