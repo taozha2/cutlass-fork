@@ -560,7 +560,7 @@ struct BenchmarkRunnerGemm {
               stride_S, block_zero.get(), stride_Z, 128};
     }
 
-    arguments.epilogue = {{options.alpha, options.beta}, block_C[0].get(), stride_C, block_D.get(), stride_D};
+    arguments.epilogue = {{ElementAcc(options.alpha), ElementAcc(options.beta)}, block_C[0].get(), stride_C, block_D.get(), stride_D};
     arguments.hw_info = hw_info;
 
     if constexpr(epi_is_deeltactmul){
@@ -642,7 +642,7 @@ struct BenchmarkRunnerGemm {
         gemm::GemmUniversalMode::kGemm,
         problem_size,
         {block_A[input_num].get(), stride_A, block_B[input_num].get(), stride_B},
-        {{options.alpha, options.beta}, block_C[input_num].get(), stride_C, block_D.get(), stride_D},
+        {{ElementAcc(options.alpha), ElementAcc(options.beta)}, block_C[input_num].get(), stride_C, block_D.get(), stride_D},
         hw_info
       };
       if constexpr (is_mixed_dtype<DispatchPolicy>) {

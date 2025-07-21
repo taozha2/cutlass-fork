@@ -547,18 +547,12 @@ public:
     if constexpr (cute::is_any_of_v<ElementA,bfloat16_t,half_t,float_e4m3_t,float_e5m2_t>
                   && cute::is_any_of_v<ElementB,bfloat16_t,half_t,float_e4m3_t,float_e5m2_t>) {
       convert_FP8_to_FP16<ElementQuant>(make_tensor(reinterpret_cast<const uint8_t*>(in.data()), in.layout()), out);
-      return;
-    }
-
-    if constexpr (!ModeHasScales) {
+    } else if constexpr (!ModeHasScales) {
       CUTLASS_PRAGMA_UNROLL
       for (int i = 0; i < decltype(size(in))::value; ++i) {
         out[i] = static_cast<DstType>(in[i]);
       }
-      return;
-    }
-
-    if constexpr (IsATransformed) {
+    } else if constexpr (IsATransformed) {
       // The current scale load atom (1x32) gives 2 scale values to
       // each thread. All threads need access to all other threads
       // scale values, and each scale value is reused twice (unrolled)
