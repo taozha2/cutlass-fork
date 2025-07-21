@@ -39,12 +39,33 @@
 #include "cute/algorithm/gemm.hpp"
 #include "cute/tensor_predicate.hpp"
 
+
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::gemm::collective {
 using namespace cute;
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
+
+template <class T, class = void>
+struct general_same_bits {
+  using type = T;
+};
+
+template <class T>
+struct general_same_bits<T, std::enable_if_t<sizeof_bits_v<T> == 8>> {
+  using type = int8_t;
+};
+
+template <class T>
+struct general_same_bits<T, std::enable_if_t<sizeof_bits_v<T> == 16>> {
+  using type = int16_t;
+};
+
+template <class T>
+struct general_same_bits<T, std::enable_if_t<sizeof_bits_v<T> == 32>> {
+  using type = int32_t;
+};
 
 template <class datatype, size_t N, class Stride = cute::Stride<_1, int64_t, int64_t>, class = void>
 struct scale_zero_copy_traits {
@@ -462,7 +483,7 @@ public:
         auto format_data = src[idx];
 
         // for performance, _Float16 have better performance than half_t here
-        using vector_type = cute::conditional_t<cute::is_same_v<DstType, half_t>, _Float16, DstType>;
+        using vector_type = typename general_same_bits<DstType>::type;
 
         auto& dst = *(cute::intel::vector_t<vector_type, vec_size>*)(d_tensor(_, s, n).data());
 
@@ -481,13 +502,13 @@ public:
               static_assert(dependent_false<LayoutIn> && "ATransform not support now");
             } else {
               if constexpr (ModeScale) {
-                dst[i] = data * scale;
+                dst[i] = cutlass::platform::bit_cast<vector_type>(static_cast<DstType>(data * scale));
               } else if constexpr (ModeScaleZero) {
-                dst[i] = (static_cast<decltype(zero)>(data) - zero) * scale;
+                dst[i] = cutlass::platform::bit_cast<vector_type>(static_cast<DstType>((static_cast<decltype(zero)>(data) - zero) * scale));
               }
             }
           } else {
-            dst[i] = static_cast<DstType>(data);
+            dst[i] = cutlass::platform::bit_cast<vector_type>(static_cast<DstType>(data));
           }
         }
       }
