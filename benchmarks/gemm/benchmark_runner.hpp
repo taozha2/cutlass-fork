@@ -285,6 +285,114 @@ struct BenchmarkRunnerGemm {
   class ElementZero,
   class ScaleLayout,
   class ZeroLayout>
+  static auto dequantize_A(DequantizedElement* dq_buffer,
+                       QuantizedElement const* q_buffer,
+                       OperandLayout const operand_layout,
+                       ElementScale const* scale_buffer,
+                       ElementZero const* zero_buffer,
+                       ScaleLayout const scale_layout,
+                       ZeroLayout const zero_layout,
+                       int const group_size) {
+    if constexpr (std::is_same_v<DequantizedElement, QuantizedElement>) {
+      return dq_buffer;
+    }
+
+    std::vector<uint8_t> dst(size(operand_layout) * sizeof_bits_v<DequantizedElement> / 8, 0);
+    cutlass::device_memory::copy_to_host(dst.data(), (uint8_t*)dq_buffer, dst.size());
+
+    std::vector<uint8_t> src(size(operand_layout) * sizeof_bits_v<QuantizedElement> / 8, 0);
+    cutlass::device_memory::copy_to_host(src.data(), (uint8_t*)q_buffer, src.size());
+
+    std::vector<uint8_t> scale(size(scale_layout) * sizeof_bits_v<ElementScale> / 8, 0);
+    cutlass::device_memory::copy_to_host(scale.data(), (uint8_t*)scale_buffer, scale.size());
+
+    std::vector<uint8_t> zero(size(zero_layout) * sizeof_bits_v<ElementZero> / 8, 0);
+    cutlass::device_memory::copy_to_host(zero.data(), (uint8_t*)zero_buffer, zero.size());
+
+    syclcompat::wait();
+
+    auto dst_tensor = make_tensor(make_gmem_ptr(reinterpret_cast<DequantizedElement*>(dst.data())), select<1, 0, 2>(operand_layout));
+
+    auto src_tensor = [&]() {
+      if constexpr (sizeof_bits_v<QuantizedElement> < 8) {
+        return make_tensor(cute::subbyte_iterator<const QuantizedElement>(src.data()), operand_layout);
+      } else {
+        return make_tensor(make_gmem_ptr(reinterpret_cast<QuantizedElement const *>(src.data())), select<1, 0, 2>(operand_layout));
+      }
+    }();
+
+    auto scale_tensor = make_tensor(make_gmem_ptr(reinterpret_cast<ElementScale const *>(scale.data())), scale_layout);
+
+    auto zero_tensor = [&]() {
+      if constexpr (sizeof_bits_v<ElementZero> < 8) {
+        auto flatten_tensor = flatten(make_tensor(cute::subbyte_iterator<const ElementZero>(zero.data()), zero_layout));
+        static_assert(rank(flatten_tensor.layout()) == 4);
+        return make_tensor(flatten_tensor.data(), select<1, 0, 2, 3>(flatten_tensor.layout()));
+      } else {
+        return make_tensor(make_gmem_ptr(reinterpret_cast<ElementZero const *>(zero.data())), zero_layout);
+      }
+    }();
+
+    auto M = size<1>(src_tensor);
+    auto K = size<0>(src_tensor);
+    auto L = size<2>(src_tensor);
+
+    static constexpr bool is_qnt = cutlass::platform::numeric_limits<DequantizedElement>::is_integer;
+
+    for (int l = 0; l < L; l++) {
+      for (int k= 0; k < K; k++) {
+        for (int m = 0; m < M; m++) {
+          auto src_data = [&]() {
+            if constexpr (is_qnt) {
+              if constexpr (sizeof_bits_v<QuantizedElement> >= 8) {
+                return  src_tensor(k, m, l);
+              } else {
+                return src_tensor(k, m, l).get();
+              }
+            } else {
+              using ret_type = cute::conditional_t<sizeof_bits_v<ElementZero> >= 8, ElementZero, int8_t>;
+              if constexpr (sizeof_bits_v<QuantizedElement> >= 8) {
+                return  (ret_type)(src_tensor(k, m, l));
+              } else {
+                return (ret_type)(src_tensor(k, m, l).get());
+              }
+            }
+          }();
+
+          auto scale_data = scale_tensor(m, k / group_size, l);
+
+          using ret_type = cute::conditional_t<sizeof_bits_v<ElementZero> >= 8, ElementZero, int8_t>;
+          ret_type zero_data = [&]() {
+            if constexpr (sizeof_bits_v<ElementZero> >= 8) {
+              return zero_tensor(m, k / group_size, l);
+            } else {
+              auto zero_elements_packed_along_k = get<0>(zero_tensor.shape());
+              return (ret_type)(zero_tensor((k / group_size) % zero_elements_packed_along_k, m, k / group_size / zero_elements_packed_along_k, l).get());
+            }
+          }();
+
+          if constexpr (is_qnt) {
+            dst_tensor(k, m, l) = ((int)(src_data / scale_data)) + zero_data;
+          } else {
+            dst_tensor(k, m, l) = (src_data - zero_data) * scale_data;
+          }
+        }
+      }
+    }
+
+    cutlass::device_memory::copy_to_device(dq_buffer, (DequantizedElement*)(raw_pointer_cast(dst_tensor.data())), dst_tensor.size());
+    syclcompat::wait();
+    return dq_buffer;
+  }
+
+  template <
+  class QuantizedElement,
+  class DequantizedElement,
+  class OperandLayout,
+  class ElementScale,
+  class ElementZero,
+  class ScaleLayout,
+  class ZeroLayout>
   static auto dequantize_B(DequantizedElement* dq_buffer,
                        QuantizedElement const* q_buffer,
                        OperandLayout const operand_layout,
@@ -369,33 +477,61 @@ struct BenchmarkRunnerGemm {
     TensorRef ref_C(block_C[0].get(), LayoutC::packed({M, N}));
     TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
 
-    auto ptr_A = [&]() {
-      if constexpr (cute::is_same_v<ElementMma, ElementA>) {
-        return block_A[0].get();
+    auto [ptr_A, ptr_B] = [&]() {
+      if constexpr (!is_mixed_dtype<DispatchPolicy>) {
+        return make_tuple(block_A[0].get(), block_B[0].get());
       } else {
-        // TODO:
-      }
-    }();
+        static constexpr bool IsAQuant = cutlass::platform::numeric_limits<ElementA>::is_integer
+                                    ^ cutlass::platform::numeric_limits<ElementAccumulator>::is_integer;
+        static constexpr bool IsBQuant = cutlass::platform::numeric_limits<ElementB>::is_integer
+                                          ^ cutlass::platform::numeric_limits<ElementAccumulator>::is_integer;
 
-    auto ptr_B = [&]() {
-      if constexpr (cute::is_same_v<ElementMma, ElementB>) {
-        return block_B[0].get();
-      } else {
-        auto shape_B = cute::make_shape(N, K, L);
-        auto shape_scale = cute::make_shape(N, K / 128, L);
+        static constexpr bool IsATransformed = CollectiveMainloop::IsATransformed;
+        auto dq_mn_size = IsATransformed ? M : N;
+
+        auto shape_ab = cute::make_shape(dq_mn_size, K, L);
+        auto shape_scale = cute::make_shape(dq_mn_size, K / 128, L);
         static constexpr auto k_packed = CollectiveMainloop::zero_elements_packed_along_k;
         auto shape_zero = [&]() {
           if constexpr (is_tuple_v<std::remove_reference_t<decltype(cute::get<1>(stride_Z))>>) {
-            return cute::make_shape(N, cute::make_shape(k_packed,
+            return cute::make_shape(dq_mn_size, cute::make_shape(k_packed,
                                                         cute::max(1, K / 128 / k_packed)), L);
           } else {
             return shape_scale;
           }
         }();
 
-        block_B_verify.reset(block_B[0].size());
-        return dequantize_B(block_B_verify.get(), block_B[0].get(), make_layout(shape_B, stride_B), block_scale.get(),
-                            block_zero.get(), make_layout(shape_scale, stride_S), make_layout(shape_zero, stride_Z), 128);
+        auto ptr_A = [&]() {
+          if constexpr (cute::is_same_v<ElementMma, ElementA>) {
+            return block_A[0].get();
+          } else if constexpr (IsAQuant) {
+            block_A_verify.reset(block_A[0].size());
+            return dequantize_A(block_A_verify.get(), block_A[0].get(), make_layout(shape_ab, stride_A), block_scale.get(),
+                                block_zero.get(), make_layout(shape_scale, stride_S), make_layout(shape_zero, stride_Z), 128);
+          } else {
+            for (int i = 0; i < block_A_verify.size(); i++) {
+              block_A_verify.get()[i] = static_cast<ElementMma>(block_A[0].get()[i]);
+            }
+            return block_A_verify.get();
+          }
+        }();
+
+        auto ptr_B = [&]() {
+          if constexpr (cute::is_same_v<ElementMma, ElementB>) {
+            return block_B[0].get();
+          } else if constexpr (IsBQuant) {
+            block_B_verify.reset(block_B[0].size());
+            return dequantize_B(block_B_verify.get(), block_B[0].get(), make_layout(shape_ab, stride_B), block_scale.get(),
+                                block_zero.get(), make_layout(shape_scale, stride_S), make_layout(shape_zero, stride_Z), 128);
+          } else {
+            for (int i = 0; i < block_B_verify.size(); i++) {
+              block_B_verify.get()[i] = static_cast<ElementMma>(block_B[0].get()[i]);
+            }
+            return block_B_verify.get();
+          }
+        }();
+
+        return make_tuple(ptr_A, ptr_B);
       }
     }();
 
@@ -488,9 +624,9 @@ struct BenchmarkRunnerGemm {
     count = std::ceil(static_cast<float>(cutlass::get_llc_size()) / static_cast<float>(mem_occupied_ABC)) + 1;
 
     if constexpr (is_mixed_dtype<DispatchPolicy>) {
-      static_assert(!CollectiveMainloop::IsATransformed);
+      static constexpr bool IsATransformed = CollectiveMainloop::IsATransformed;
 
-      auto dq_mn_size = N;
+      auto dq_mn_size = IsATransformed ? M : N;
       auto scale_k = K / 128;
 
       static constexpr auto k_packed = CollectiveMainloop::zero_elements_packed_along_k;

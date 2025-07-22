@@ -213,11 +213,18 @@ struct MixedPrecisionGemmConfiguration<
           GmemTiledCopyC,
           void, void>;
 
-  using CollectiveMainloop = collective::CollectiveMma<
-      GEMMDispatchPolicy, TileShape, ElementA, cutlass::gemm::TagToStrideA_t<LayoutA>,
-      cute::tuple<ElementB, ElementScale, StrideS, ElementZero, StrideZ>, cutlass::gemm::TagToStrideB_t<LayoutB>, TiledMma,
-      GmemTiledCopyA, void, void, cute::identity, GmemTiledCopyB, void, void,
-      cute::identity>;
+  static constexpr bool IsAQuant = cutlass::platform::numeric_limits<ElementA>::is_integer
+                                    ^ cutlass::platform::numeric_limits<ElementAccumulator>::is_integer;
+  static constexpr bool IsBQuant = cutlass::platform::numeric_limits<ElementB>::is_integer
+                                    ^ cutlass::platform::numeric_limits<ElementAccumulator>::is_integer;
+
+  using CollectiveMainloop = collective::CollectiveMma<GEMMDispatchPolicy, TileShape,
+                                                       cute::conditional_t<IsAQuant, cute::tuple<ElementA, ElementScale, StrideS, ElementZero, StrideZ>, ElementA>,
+                                                       cutlass::gemm::TagToStrideA_t<LayoutA>,
+                                                       cute::conditional_t<IsBQuant, cute::tuple<ElementB, ElementScale, StrideS, ElementZero, StrideZ>, ElementB>,
+                                                       cutlass::gemm::TagToStrideB_t<LayoutB>, TiledMma,
+                                                       GmemTiledCopyA, void, void, cute::identity, GmemTiledCopyB, void, void,
+                                                       cute::identity>;
 
   using GemmKernel = kernel::GemmUniversal<Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue, void>;
 
