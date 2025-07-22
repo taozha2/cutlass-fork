@@ -509,9 +509,11 @@ struct BenchmarkRunnerGemm {
             return dequantize_A(block_A_verify.get(), block_A[0].get(), make_layout(shape_ab, stride_A), block_scale.get(),
                                 block_zero.get(), make_layout(shape_scale, stride_S), make_layout(shape_zero, stride_Z), 128);
           } else {
+            auto block_host = std::vector<ElementMma>(block_A_verify.size());
             for (int i = 0; i < block_A_verify.size(); i++) {
-              block_A_verify.get()[i] = static_cast<ElementMma>(block_A[0].get()[i]);
+              block_host.data()[i] = static_cast<ElementMma>(block_A[0].get()[i]);
             }
+            block_A_verify.copy_from_host(block_host.data());
             return block_A_verify.get();
           }
         }();
@@ -524,9 +526,11 @@ struct BenchmarkRunnerGemm {
             return dequantize_B(block_B_verify.get(), block_B[0].get(), make_layout(shape_ab, stride_B), block_scale.get(),
                                 block_zero.get(), make_layout(shape_scale, stride_S), make_layout(shape_zero, stride_Z), 128);
           } else {
+            auto block_host = std::vector<ElementMma>(block_B_verify.size());
             for (int i = 0; i < block_B_verify.size(); i++) {
-              block_B_verify.get()[i] = static_cast<ElementMma>(block_B[0].get()[i]);
+              block_host.data()[i] = static_cast<ElementMma>(block_B[0].get()[i]);
             }
+            block_B_verify.copy_from_host(block_host.data());
             return block_B_verify.get();
           }
         }();
