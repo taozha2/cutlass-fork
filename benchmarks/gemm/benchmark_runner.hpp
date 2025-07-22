@@ -607,6 +607,9 @@ struct BenchmarkRunnerGemm {
         }
       }();
 
+      block_A_verify.reset(size_A);
+      block_B_verify.reset(size_B);
+
       block_scale.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
       block_zero.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
 
@@ -628,9 +631,7 @@ struct BenchmarkRunnerGemm {
         block_A[i].reset(size_A);
         block_B[i].reset(size_B);
         block_C[i].reset(size_C);
-        block_A_verify.reset(size_A);
-        block_B_verify.reset(size_B);
-        if (i == 0) {
+        if (is_mixed_dtype<DispatchPolicy> && i == 0) {
           initialize_mixed_dtype_block(block_A[i], block_A_verify, seed + i);
           initialize_mixed_dtype_block(block_B[i], block_B_verify, seed + i);
         } else {
