@@ -82,6 +82,8 @@ function(cutlass_benchmark_add_executable NAME)
     ${__LIBRARIES}
   )
 
+  target_link_options( ${NAME} PRIVATE -Xs "-options \"-igc_opts 'allowDecompose2DBlockFuncs=0'\"" )
+
   target_include_directories(
     ${NAME}
     PRIVATE

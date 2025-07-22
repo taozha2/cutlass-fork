@@ -49,6 +49,7 @@
 #include "cutlass/util/reference/device/tensor_compare.h"
 #include "cutlass/util/reference/device/tensor_fill.h"
 #include "cutlass/util/reference/device/tensor_silu.h"
+#include "cutlass/util/mixed_dtype_utils.hpp"
 
 #include "../common.hpp"
 
@@ -101,31 +102,6 @@ template <class T>
 struct ZeroStride<T, cute::void_t<typename T::StrideZero>> {
   using type = typename T::StrideZero;
 };
-
-/// Helper to initialize a block of device data
-template <class Element>
-bool initialize_block(
-        cutlass::DeviceAllocation<Element>& block,
-        uint64_t seed=2023) {
-
-  Element scope_max, scope_min;
-  int bits_input = cutlass::sizeof_bits<Element>::value;
-
-  if (bits_input == 1) {
-    scope_max = Element(2);
-    scope_min = Element(0);
-  } else if (bits_input <= 8) {
-    scope_max = Element(2);
-    scope_min = Element(-2);
-  } else {
-    scope_max = Element(8);
-    scope_min = Element(-8);
-  }
-
-  reference::device::BlockFillRandomUniform(
-       block.get(), block.size(), seed, scope_max, scope_min, 0);
-  return true;
-}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -502,35 +478,19 @@ struct BenchmarkRunnerGemm {
         }();
 
         auto ptr_A = [&]() {
-          if constexpr (cute::is_same_v<ElementMma, ElementA>) {
-            return block_A[0].get();
-          } else if constexpr (IsAQuant) {
-            block_A_verify.reset(block_A[0].size());
+          if constexpr (IsAQuant) {
             return dequantize_A(block_A_verify.get(), block_A[0].get(), make_layout(shape_ab, stride_A), block_scale.get(),
                                 block_zero.get(), make_layout(shape_scale, stride_S), make_layout(shape_zero, stride_Z), 128);
           } else {
-            auto block_host = std::vector<ElementMma>(block_A_verify.size());
-            for (int i = 0; i < block_A_verify.size(); i++) {
-              block_host.data()[i] = static_cast<ElementMma>(block_A[0].get()[i]);
-            }
-            block_A_verify.copy_from_host(block_host.data());
             return block_A_verify.get();
           }
         }();
 
         auto ptr_B = [&]() {
-          if constexpr (cute::is_same_v<ElementMma, ElementB>) {
-            return block_B[0].get();
-          } else if constexpr (IsBQuant) {
-            block_B_verify.reset(block_B[0].size());
+         if constexpr (IsBQuant) {
             return dequantize_B(block_B_verify.get(), block_B[0].get(), make_layout(shape_ab, stride_B), block_scale.get(),
                                 block_zero.get(), make_layout(shape_scale, stride_S), make_layout(shape_zero, stride_Z), 128);
           } else {
-            auto block_host = std::vector<ElementMma>(block_B_verify.size());
-            for (int i = 0; i < block_B_verify.size(); i++) {
-              block_host.data()[i] = static_cast<ElementMma>(block_B[0].get()[i]);
-            }
-            block_B_verify.copy_from_host(block_host.data());
             return block_B_verify.get();
           }
         }();
@@ -597,7 +557,7 @@ struct BenchmarkRunnerGemm {
     float scope_min(min_dequant_val / elt_max_f);
 
     cutlass::reference::device::BlockFillRandomUniform(
-      block.get(), block.size(), seed, Element(scope_max), Element(scope_min));
+      block.get(), block.size(), seed, Element(4), Element(1));
 
     return true;
   }
@@ -605,7 +565,7 @@ struct BenchmarkRunnerGemm {
   template <class Element>
   bool initialize_zero(cutlass::DeviceAllocation<Element>& block) {
       cutlass::reference::device::BlockFillRandomUniform(
-        block.get(), block.size(), seed, Element(2.0f), Element(-2.0f));
+        block.get(), block.size(), seed, Element(2.0f), Element(1.0f));
     return true;
   }
 
@@ -668,8 +628,15 @@ struct BenchmarkRunnerGemm {
         block_A[i].reset(size_A);
         block_B[i].reset(size_B);
         block_C[i].reset(size_C);
-        initialize_block(block_A[i], seed + i);
-        initialize_block(block_B[i], seed + i);
+        block_A_verify.reset(size_A);
+        block_B_verify.reset(size_B);
+        if (i == 0) {
+          initialize_mixed_dtype_block(block_A[i], block_A_verify, seed + i);
+          initialize_mixed_dtype_block(block_B[i], block_B_verify, seed + i);
+        } else {
+          initialize_block(block_A[i], seed + i);
+          initialize_block(block_B[i], seed + i);
+        }
         initialize_block(block_C[i], seed + i);
         if constexpr (epi_is_deeltactmul) {
           block_Aux[i].reset(size_C);

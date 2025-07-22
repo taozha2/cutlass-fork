@@ -226,7 +226,7 @@ struct MixedPrecisionGemmConfiguration<
                                                        GmemTiledCopyA, void, void, cute::identity, GmemTiledCopyB, void, void,
                                                        cute::identity>;
 
-  using GemmKernel = kernel::GemmUniversal<Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue, void>;
+  using GemmKernel = kernel::GemmUniversal<Shape<int, int, int, int>, CollectiveMainloop, CollectiveEpilogue>;
 
   using Gemm = device::GemmUniversalAdapter<GemmKernel>;
 

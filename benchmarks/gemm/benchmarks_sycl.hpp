@@ -420,7 +420,7 @@ using PvcMixedPrecisionGemmBF16S8BF16S8BF16S8_RCR_1 = cutlass::gemm::device::Mix
         Shape<_32, _128, _32>,  Scheduler::Gemm,
         typename TiledMMAHelper<MMA_Atom<XE_8x16x32_S32S8S8S32_TT>, Layout<Shape<_32, _128, _32>>,
                                         Layout<Shape<_1, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA,
-        XE_2D_U16x32x32_LD_N, XE_2D_U8x16x16_LD_T, XE_2D_U16x8x16_ST_N,
+        XE_2D_U16x32x32_LD_N, XE_2D_U8x16x32_LD_T, XE_2D_U16x8x16_ST_N,
         cutlass::epilogue::fusion::LinearCombination<int32_t, int32_t,
           int32_t, int32_t, cutlass::FloatRoundStyle::round_to_nearest>,
         2
@@ -436,7 +436,7 @@ using PvcMixedPrecisionGemmFP16S8FP16S8FP16S8_RCR_1 = cutlass::gemm::device::Mix
         Shape<_32, _128, _32>,  Scheduler::Gemm,
         typename TiledMMAHelper<MMA_Atom<XE_8x16x32_S32S8S8S32_TT>, Layout<Shape<_32, _128, _32>>,
                                         Layout<Shape<_1, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA,
-        XE_2D_U16x32x32_LD_N, XE_2D_U8x16x16_LD_T, XE_2D_U16x8x16_ST_N,
+        XE_2D_U16x32x32_LD_N, XE_2D_U8x16x32_LD_T, XE_2D_U16x8x16_ST_N,
         cutlass::epilogue::fusion::LinearCombination<int32_t, int32_t,
           int32_t, int32_t, cutlass::FloatRoundStyle::round_to_nearest>,
         2
