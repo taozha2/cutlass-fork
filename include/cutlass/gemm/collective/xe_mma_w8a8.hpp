@@ -196,9 +196,11 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     static_assert(is_rmem<FrgTensorC>::value, "C tensor must be rmem resident.");
 
     auto smem = syclcompat::local_mem<half_t[allocate_elements]>();
-    Tensor sA = make_tensor(make_smem_ptr(smem), make_shape(_16{}, Int<SG_M * SG_K / 16>{}, Int<ATOM_M>{}, Int<inner_loop_k>{}));
-    Tensor sB = make_tensor(make_smem_ptr(smem + SG_M * SG_K * ATOM_M * inner_loop_k), make_shape(_16{}, Int<SG_N * SG_K / 16>{}, Int<inner_loop_k>{}, Int<ATOM_N>{}));
-  
+    Tensor sA = make_tensor(make_smem_ptr(smem),
+                            make_shape(_16{}, Int<SG_M * SG_K / 16>{}, Int<ATOM_M>{}, Int<inner_loop_k>{}));
+    Tensor sB = make_tensor(make_smem_ptr(smem + SG_M * SG_K * ATOM_M * inner_loop_k),
+                            make_shape(_16{}, Int<SG_N * SG_K / 16>{}, Int<inner_loop_k>{}, Int<ATOM_N>{}));
+
     auto thr_copy_A = mainloop.tiled_copy_a.get_slice(thread_idx);
     auto thr_copy_B = mainloop.tiled_copy_b.get_slice(thread_idx);
 
@@ -208,10 +210,12 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     // To make all work items in a subgroup have the same global tensors pass in the index of work item 0 in each subgroup
     Layout sg_layout = Layout<Shape<Int<ATOM_M>, Int<ATOM_N>>, Stride<Int<ATOM_N>,_1>>{};
     Layout sg_layout_A = composition(sg_layout, make_layout(make_shape(Int<ATOM_M>{}, Int<inner_loop_k>{})));
-    Layout sg_layout_B = make_layout(make_shape(Int<inner_loop_k>{}, Int<ATOM_N>{}));
+    Layout sg_layout_B = make_layout(make_shape(Int<inner_loop_k>{}, Int<ATOM_N>{}), make_stride(_4{}, _1{}));
     auto sg = syclcompat::get_nd_item<1>().get_sub_group();
+    auto wg = syclcompat::get_nd_item<1>().get_group();
     auto sg_id = sg.get_group_linear_id();
-    auto logic_sg_id = sg_id < Num_SGs /2 ? sg_layout_A(sg_id) : sg_layout_B(sg_id - Num_SGs / 2); 
+    auto wg_id = wg.get_group_linear_id();
+    auto logic_sg_id = sg_id >= Num_SGs /2 ? sg_layout_B(sg_id - Num_SGs / 2) : sg_layout_A(sg_id); 
     auto first_thread_in_sg_idx = logic_sg_id * DispatchPolicy::SubgroupSize;
     auto thr_mma = tiled_mma.get_slice(first_thread_in_sg_idx);
 
@@ -292,39 +296,34 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     // }
 
     CUTLASS_PRAGMA_UNROLL
-    for (int k_tile = k_start_idx; k_tile < ceil_div(k_tile_count, inner_loop_k); k_tile++, prefetch_k +=2) {
-      barrier_arrive(barrier_scope);
-      if(sg_id < Num_SGs / 2){
-        barrier_arrive(3);
+    for (int k_tile = 0; k_tile < ceil_div(k_tile_count, inner_loop_k); k_tile++, prefetch_k +=2) {
+      if(sg_id < Num_SGs >> 1){
         auto [m, k] = idx2crd(logic_sg_id, make_shape(ATOM_M, inner_loop_k), make_stride(4, 1));
         copy(mainloop.tiled_copy_a, tAgA(_,_,_,k_tile * inner_loop_k + k), tArA);
         convert_FP8_to_FP16<ElementA>(tCrA, tCrA_fp16);
         Tensor thr_copy_store_A =  thr_copy_Asmem.partition_D(sA(_,_,m,k));
-        // Tensor tCrA_fp16_view = thr_copy_Asmem.partition_S(tCrA_fp16);
         auto tCrA_fp16_view = make_tensor(static_cast<decltype(tCrA_fp16)&&>(tCrA_fp16).data(),
                                           thr_copy_store_A.shape());
         copy(tiled_copy_A, tCrA_fp16_view, thr_copy_store_A);
-        barrier_wait(3);
       } else {
-        barrier_arrive(3);
         auto [k, n] = idx2crd(logic_sg_id, make_shape(inner_loop_k, ATOM_N), make_stride(4,1));
         copy(mainloop.tiled_copy_b, tBgB(_,_,_,k_tile * inner_loop_k + k), tBrB);
         convert_FP8_to_FP16<ElementB>(tCrB, tCrB_fp16);
         Tensor thr_copy_store_B = thr_copy_Bsmem.partition_D(sB(_,_,k,n));
-        // Tensor tCrB_fp16_view = thr_copy_Bsmem.partition_S(tCrB_fp16);
         auto tCrB_fp16_view = make_tensor(static_cast<decltype(tCrB_fp16)&&>(tCrB_fp16).data(),
                                           thr_copy_store_B.shape());
         copy(tiled_copy_B, tCrB_fp16_view, thr_copy_store_B);
-        barrier_wait(3);
       }
-
+      barrier_arrive(barrier_scope,barrier_scope,260);
+      barrier_wait(barrier_scope,barrier_scope,258);
       // if (prefetch_k < k_tile_count) {
       //   prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
       //   prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
       //   prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k+1));
       //   prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k+1));
       // }
-      barrier_wait(barrier_scope);
+      // barrier_wait(barrier_scope);
+      // print("");
   
       auto [m, n] = idx2crd(sg_id, make_shape(4, 4), make_stride(4, 1));
       Tensor thr_copy_load_A =  thr_copy_Asmem.partition_S(sA(_,_,m,0));
@@ -336,76 +335,16 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       
       CUTLASS_PRAGMA_UNROLL
       for(int k = inner_loop_k - 1; k > -1; k--) {
-        barrier_arrive(3);
-        Tensor thr_copy_load_A =  thr_copy_Asmem.partition_S(sA(_,_,m,k));
-        Tensor thr_copy_load_B =  thr_copy_Bsmem.partition_S(sB(_,_,k,n));
+        Tensor thr_copy_load_A = thr_copy_Asmem.partition_S(sA(_,_,m,k));
+        Tensor thr_copy_load_B = thr_copy_Bsmem.partition_S(sB(_,_,k,n));
+        
         copy(tiled_copy_A, thr_copy_load_A, tCrA_fp16_view);
         copy(tiled_copy_B, thr_copy_load_B, tCrB_fp16_view);
-        barrier_wait(3);
-        if(cute::thread(0, 0)) {
-        //   print("\n======================================A register start ===============================\n");
-        //   for(size_t i = 0; i < size(thr_copy_load_A); i++){
-        //     print("%4.0f ", static_cast<float>(thr_copy_load_A[i]));
-        //   }
-        //   print("\n");
-        //   for(size_t i =0; i < size(tCrA_fp16_view); i++) {
-        //     print("%4.0f ", static_cast<float>(tCrA_fp16_view[i]));
-        //   }
-        //   print("\n======================================A register end ===============================\n");
-        //   print("\n");
-        //   print("\n======================================B register start ===============================\n");
-        //   for(size_t i = 0; i < size(thr_copy_load_B); i++){
-        //     print("%4.0f ", static_cast<float>(thr_copy_load_B[i]));
-        //   }
-        //   print("\n");
-          // for(size_t i =0; i < 1; i++) {
-          //   print("%4.0f ", static_cast<float>(tCrB_fp16_view[i]));
-          // }
-          print("");
-        //   print("\n======================================B register end ===============================\n");
-        }
-        
         cute::gemm(tiled_mma, tCrA_fp16, tCrB_fp16, accum);
       }
+      barrier_arrive(2,2,260);
+      barrier_wait(2,2,258);
     }
-  #if 0
-  if(cute::thread(32, 0)) {
-    print("\n");
-    print("==================== A matrix =====================================\n");
-    for(int j = 0; j < 64; j++) {
-        print("%4.0f ", static_cast<float>(j));
-    }
-    print("\n\n");
-    // for(int l = 0; l < inner_loop_k; l++){
-    //   for(int m = 0; m < ATOM_M; m++){
-    //     print("-------block------\n");
-    //     for (int i = 0; i < 16; i++) {
-    //       for (int j = 0; j < 64; j++) {
-    //         if (static_cast<half_t>(mainloop.ptr_A[(j % 32 + m * 32) * 64 + i +  (j / 32) * 16 + l * 32]) !=
-    //            (sA(i, j, m, l)))
-    //         print("%4.0f ", static_cast<float>(mainloop.ptr_A[(j + m * 32) * 64 + i +  (j / 32) * 16 + l * 32])); 
-    //       }
-    //       print("\n");
-    //     }
-    //   }
-    // }
-    print("===================== B matrix  ==================================\n");
-    for(int n = 0; n < ATOM_N; n++){
-      for(int k = 0; k < inner_loop_k; k++){
-        print("-------block------\n");
-        for (int i = 0; i < 16; i++) {
-          for (int j = 0; j < 64; j++) {
-            if (static_cast<half_t>(mainloop.ptr_B[(j % 32 + k * 32) * 128 + i +  (j / 32) * 16 + n * 32]) !=
-               (sB(i, j, k, n)))
-            print("%4.0f ", static_cast<float>(mainloop.ptr_B[(j % 32 + k * 32) * 128 + i +  (j / 32) * 16 + n * 32])); 
-          }
-          print("\n");
-        }
-      }
-    }
-
-  }
-  #endif
   }
 };
 

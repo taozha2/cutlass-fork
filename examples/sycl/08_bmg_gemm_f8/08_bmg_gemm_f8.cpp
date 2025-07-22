@@ -461,21 +461,6 @@ int main(int argc, const char** argv) {
   //
   // Parse options
   //
-  // Layout sg_layout = Layout<Shape<_4,_4>, Stride<_4, _1>>{};
-  // auto inv_layout = right_inverse(sg_layout);
-  // Layout left_half_layout = Layout<Shape<_4, _2>, Stride<_1, _4>>{};
-  // Layout upper_half_layout = Layout<Shape<_4, _2>, Stride<_2, _1>>{};
-  // auto inv_half_layout = right_inverse(upper_half_layout);
-  // // cute::print_layout(sg_layout); print("\n");
-  // // cute::print_layout(inv_layout); print("\n");
-  // cute::print_layout(Layout<Shape<_2, _4>, Stride<_1, _2>>{}); print(idx2crd(5, make_shape(2, 4))); print("\n");
-
-  // cute::print_layout(inv_half_layout); print("\n");
-  // cute::print(right_inverse(Layout<Shape<_2, _4>, Stride<_4, _1>>{})); print("\n");
-  // cute::print_layout(composition(sg_layout, left_half_layout));
-  // cute::print_layout(composition(sg_layout, inv_half_layout));
-  cute::print_layout(Layout<Shape<_4, _2>, Stride<_4, _1>>{});
-  cute::print_layout(Layout<Shape<_2, _4>, Stride<_4, _1>>{});
   Options options;
 
   options.parse(argc, argv);
