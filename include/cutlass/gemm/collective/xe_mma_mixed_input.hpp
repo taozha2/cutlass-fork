@@ -39,7 +39,6 @@
 #include "cute/algorithm/gemm.hpp"
 #include "cute/tensor_predicate.hpp"
 
-
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace cutlass::gemm::collective {
@@ -430,7 +429,6 @@ public:
     Tensor<EngineScales, LayoutScales> const& tCrS_input,
     Tensor<EngineZeros, LayoutZeros> const& tCrZ_input
   ) {
-
     static_assert(is_rmem<EngineIn>::value, "Input tensor for conversion must come from registers");
     static_assert(size_v<LayoutIn> == cosize_v<LayoutIn>);
     static_assert(cute::is_same_v<LayoutOut, LayoutIn>);
