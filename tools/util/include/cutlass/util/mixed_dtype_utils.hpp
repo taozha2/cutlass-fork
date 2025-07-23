@@ -525,8 +525,7 @@ auto max_for_test = T(cute::sizeof_bits_v<T> >= 8 ? 1 << cute::ceil_div(digits<T
 
 /// Helper to initialize a block of device data
 template <class Element, class... Args_t>
-bool initialize_block(Element* block, std::size_t size, uint64_t seed, Args_t&&... args) {
-
+bool initialize_block(cutlass::DeviceAllocation<Element>& block, uint64_t seed, Args_t&&... args) {
   static_assert(sizeof...(Args_t) == 0 || sizeof...(Args_t) == 2);
 
   Element scope_max;
@@ -541,16 +540,42 @@ bool initialize_block(Element* block, std::size_t size, uint64_t seed, Args_t&&.
     scope_min = is_signed_v<Element> ? Element(-scope_max) : Element(1);
   }
 
-  cutlass::reference::device::BlockFillRandomUniform(
-       block, size, seed, scope_max, scope_min, 0);
+  if constexpr (cute::sizeof_bits_v<Element> >= 8) {
+    cutlass::reference::device::BlockFillRandomUniform(
+        block.get(), block.size(), seed, scope_max, scope_min, 0);
+  } else {
+    std::uniform_int_distribution<> dist(scope_min, scope_max);
+
+    std::ranlux24_base rng(std::random_device{}());
+    rng.seed(seed);
+
+    static constexpr auto array_size = 1024;
+
+    cute::array_subbyte<Element, array_size> block_host{};
+
+    for (int i = 0; i < block_host.size(); ++i) {
+      block_host[i] = static_cast<Element>(dist(rng));
+    }
+
+    static constexpr auto elements_per_byte = cute::sizeof_bits_v<int8_t> / cute::sizeof_bits_v<Element>;
+
+    int loop_cnt = block.size() / array_size;
+    for (int i = 0; i < loop_cnt; i++) {
+      cutlass::device_memory::copy_to_device(((uint8_t*)(block.get())) + (i * array_size) / elements_per_byte,
+                                    (uint8_t*)(raw_pointer_cast(block_host.begin())),
+                                    array_size / elements_per_byte);
+    }
+
+    auto tail_size = block.size() % array_size;
+    if (tail_size) {
+      cutlass::device_memory::copy_to_device(((uint8_t*)block.get()) + (loop_cnt * array_size) / elements_per_byte,
+                                    (uint8_t*)(raw_pointer_cast(block_host.begin())),
+                                    tail_size / elements_per_byte);
+    }
+  }
 
   syclcompat::wait();
   return true;
-}
-
-template <class Element, class... Args_t>
-bool initialize_block(cutlass::DeviceAllocation<Element>& block, uint64_t seed, Args_t&&... args) {
-  return initialize_block<Element>(block.get(), block.size(), seed, args...);
 }
 
 template <typename T1, typename T2, class... Args_t>

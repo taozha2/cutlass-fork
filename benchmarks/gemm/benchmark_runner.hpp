@@ -547,28 +547,6 @@ struct BenchmarkRunnerGemm {
     return passed;
   }
 
-    template <class Element>
-  bool initialize_scale(cutlass::DeviceAllocation<Element>& block) {
-    float elt_max_f = float(cutlass::platform::numeric_limits<Element>::max());
-    const float max_dequant_val = 4.f;
-    const float min_dequant_val = 0.5f;
-
-    float scope_max(max_dequant_val / elt_max_f);
-    float scope_min(min_dequant_val / elt_max_f);
-
-    cutlass::reference::device::BlockFillRandomUniform(
-      block.get(), block.size(), seed, Element(4), Element(1));
-
-    return true;
-  }
-
-  template <class Element>
-  bool initialize_zero(cutlass::DeviceAllocation<Element>& block) {
-      cutlass::reference::device::BlockFillRandomUniform(
-        block.get(), block.size(), seed, Element(2.0f), Element(1.0f));
-    return true;
-  }
-
   /// Initialize operands to be used in the GEMM and reference GEMM
   void initialize(::benchmark::State& state, const ProblemShapeType& problem_size) {
     auto problem_shape_MNKL = cute::append<4>(problem_size, 1);
@@ -613,8 +591,8 @@ struct BenchmarkRunnerGemm {
       block_scale.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
       block_zero.reset(static_cast<std::size_t>(scale_k) * L * dq_mn_size);
 
-      initialize_scale(block_scale);
-      initialize_zero(block_zero);
+      initialize_block(block_scale, seed, ElementScale(1), ElementScale(4));
+      initialize_block(block_zero, seed);
     }
 
     for(int i=0; i < count; i++) {
