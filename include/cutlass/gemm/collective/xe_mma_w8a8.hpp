@@ -197,9 +197,9 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
 
     auto smem = syclcompat::local_mem<half_t[allocate_elements]>();
     Tensor sA = make_tensor(make_smem_ptr(smem),
-                            make_shape(_16{}, Int<SG_M * SG_K / 16>{}, Int<ATOM_M>{}, Int<inner_loop_k>{}));
+                            make_shape(Int<SG_M * SG_K/16>{},_16{}, Int<ATOM_M>{}, Int<inner_loop_k>{}));
     Tensor sB = make_tensor(make_smem_ptr(smem + SG_M * SG_K * ATOM_M * inner_loop_k),
-                            make_shape(_16{}, Int<SG_N * SG_K / 16>{}, Int<inner_loop_k>{}, Int<ATOM_N>{}));
+                            make_shape(Int<SG_N * SG_K/16>{},_16{},Int<inner_loop_k>{}, Int<ATOM_N>{}));
 
     auto thr_copy_A = mainloop.tiled_copy_a.get_slice(thread_idx);
     auto thr_copy_B = mainloop.tiled_copy_b.get_slice(thread_idx);
@@ -273,12 +273,15 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     auto pAgA = thr_prefetch_A.partition_S(gA);
     auto pBgB = thr_prefetch_B.partition_S(gB);
 
-    auto tiled_copy_A = make_tiled_copy(Copy_Atom<UniversalCopy<half_t>, half_t>{}, 
-                                      Layout<Shape<_16, _1>, Stride<_1, _0>>{},
-                                      Layout<Shape<_1, Int<SG_M * SG_K / 16>>, Stride<_0, _1>>{});
-    auto tiled_copy_B = make_tiled_copy(Copy_Atom<UniversalCopy<half_t>, half_t>{}, 
-                                        Layout<Shape<_16, _1>, Stride<_1, _0>>{},
-                                        Layout<Shape<_1, Int<SG_N * SG_K / 16>>, Stride<_0, _1>>{});
+    using AccessTypeA = cutlass::AlignedArray<half_t, SG_M * SG_K / 16>;
+    using AccessTypeB = cutlass::AlignedArray<half_t, SG_N * SG_K / 16>;
+
+    auto tiled_copy_A = make_tiled_copy(Copy_Atom<UniversalCopy<AccessTypeA>, half_t>{}, 
+                                      Layout<Shape<_1, _16>, Stride<_0, _1>>{},
+                                      Layout<Shape<Int<SG_M * SG_K / 16>, _1>, Stride<_1, _0>>{});
+    auto tiled_copy_B = make_tiled_copy(Copy_Atom<UniversalCopy<AccessTypeB>, half_t>{}, 
+                                        Layout<Shape<_1, _16>, Stride<_0, _1>>{},
+                                        Layout<Shape<Int<SG_N * SG_K / 16>,_1>, Stride<_1, _0>>{});
     auto thr_copy_Asmem = tiled_copy_A.get_thread_slice(ThreadIdxX() % 16);
     auto thr_copy_Bsmem = tiled_copy_B.get_thread_slice(ThreadIdxX() % 16);
 
