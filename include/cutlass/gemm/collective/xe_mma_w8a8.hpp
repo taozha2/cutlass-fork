@@ -292,11 +292,13 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
     constexpr int barrier_scope = 2;
     int prefetch_k = k_start_idx;
 
-    // CUTLASS_PRAGMA_UNROLL
-    // for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
-    //   prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
-    //   prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
-    // }
+    CUTLASS_PRAGMA_UNROLL
+    for (; prefetch_k < DispatchPolicy::Stages; prefetch_k++) {
+      prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
+      prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
+    }
+    barrier_arrive(barrier_scope);
+    barrier_wait(barrier_scope);
 
     CUTLASS_PRAGMA_UNROLL
     for (int k_tile = 0; k_tile < ceil_div(k_tile_count, inner_loop_k); k_tile++, prefetch_k +=2) {
@@ -319,14 +321,12 @@ struct CollectiveMma<MainloopIntelW8A8<Stages, Schedule>, TileShape_, ElementA_,
       }
       barrier_arrive(barrier_scope,barrier_scope,260);
       barrier_wait(barrier_scope,barrier_scope,258);
-      // if (prefetch_k < k_tile_count) {
-      //   prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
-      //   prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
-      //   prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k+1));
-      //   prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k+1));
-      // }
-      // barrier_wait(barrier_scope);
-      // print("");
+      if (prefetch_k < k_tile_count) {
+        prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k));
+        prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k));
+        prefetch(tiled_prefetch_a, pAgA(_, _, _, prefetch_k+1));
+        prefetch(tiled_prefetch_b, pBgB(_, _, _, prefetch_k+1));
+      }
   
       auto [m, n] = idx2crd(sg_id, make_shape(4, 4), make_stride(4, 1));
       Tensor thr_copy_load_A =  thr_copy_Asmem.partition_S(sA(_,_,m,0));
