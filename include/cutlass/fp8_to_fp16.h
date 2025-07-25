@@ -43,7 +43,7 @@
 template <typename EncodingType, typename TensorIn, typename TensorOut>
 CUTLASS_DEVICE void
 convert_FP8_to_FP16(TensorIn const &in,
-                    TensorOut &out) {
+                    TensorOut &&out) {
 
   static_assert(cute::is_rmem<typename TensorIn::engine_type>::value,
                 "Input tensor for A conversion must come from registers");

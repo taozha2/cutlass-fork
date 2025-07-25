@@ -407,7 +407,7 @@ int launcher(Options& options)
       typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
       Layout<Shape<_4, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
 
-  constexpr int PipelineStages = 3;
+  constexpr int PipelineStages = 2;
   using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelW8A8<PipelineStages>;
   using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
 
