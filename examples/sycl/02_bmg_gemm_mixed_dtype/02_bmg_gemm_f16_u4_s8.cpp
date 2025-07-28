@@ -83,6 +83,9 @@ enum GemmMode {
   ConvertAndScaleWithZeroPoint
 };
 
+using MmaType = cutlass::half_t;
+using QuantType = uint4_t;
+
 // Command line options parsing
 struct Options {
 
@@ -111,8 +114,8 @@ struct Options {
       return;
     }
 
-    cmd.get_cmd_line_argument("m", m, 32);
-    cmd.get_cmd_line_argument("n", n, 14336);
+    cmd.get_cmd_line_argument("m", m, 5120);
+    cmd.get_cmd_line_argument("n", n, 4096);
     cmd.get_cmd_line_argument("k", k, 4096);
     cmd.get_cmd_line_argument("l", l, 1);
     cmd.get_cmd_line_argument("g", g, 128);
@@ -270,7 +273,7 @@ struct ExampleRunner {
             FusionCallBacks,
             XE_2D_U32x8x16_LD_N,
             void, void,
-            XE_2D_U8x8x16_ST_N,
+            XE_2D_U16x8x16_ST_N,
             void, void>;
 
     // Mainloop
@@ -704,7 +707,7 @@ int main(int argc, const char** argv) {
   using ElementComputeEpilogue = int32_t;  // <- data type of epilogue operations
   using ElementInputA = half_t;            // <- data type of elements in input matrix A
   using ElementInputB = uint4_t;           // <- data type of elements in input matrix B
-  using ElementOutput = int8_t;            // <- data type of elements in output matrix D
+  using ElementOutput = half_t;            // <- data type of elements in output matrix D
 
   using LayoutA = cutlass::layout::RowMajor;
   using LayoutB = cutlass::layout::ColumnMajor;
@@ -712,7 +715,7 @@ int main(int argc, const char** argv) {
   using LayoutD = cutlass::layout::RowMajor;
 
   using ElementZero = int4_t;
-  using ElementScale = ElementInputA;
+  using ElementScale = half_t;
 
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
   using StrideZero = cute::Stride<_8, cute::Stride<_1, int64_t>, int64_t>; // int4_t zero point packed 8 elements along K dimension and then along M dimension
@@ -746,7 +749,7 @@ int main(int argc, const char** argv) {
           FusionCallBacks,
           XE_2D_U32x8x16_LD_N,
           void, void,
-          XE_2D_U8x8x16_ST_N,
+          XE_2D_U16x8x16_ST_N,
           void, void>;
 
   // Use the helpers to avoid template arg repetition

@@ -61,11 +61,16 @@ namespace cutlass::benchmark {
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+#if defined(SYCL_INTEL_TARGET)
 template <class T, int Stages = 0>
 static constexpr auto is_mixed_dtype = false;
 
 template <int Stages>
 static constexpr auto is_mixed_dtype<cutlass::gemm::MainloopIntelXeXMX16MixedPrecision<Stages>> = true;
+#else
+template <class T, int Stages = 0>
+static constexpr auto is_mixed_dtype = false;
+#endif
 
 template <class T, class = void>
 struct ScaleType {
@@ -609,9 +614,14 @@ struct BenchmarkRunnerGemm {
         block_A[i].reset(size_A);
         block_B[i].reset(size_B);
         block_C[i].reset(size_C);
-        if (is_mixed_dtype<DispatchPolicy> && i == 0) {
-          initialize_mixed_dtype_block(block_A[i], block_A_verify, seed + i);
-          initialize_mixed_dtype_block(block_B[i], block_B_verify, seed + i);
+        if constexpr (is_mixed_dtype<DispatchPolicy>) {
+          if (i == 0) {
+            initialize_mixed_dtype_block(block_A[i], block_A_verify, seed + i);
+            initialize_mixed_dtype_block(block_B[i], block_B_verify, seed + i);
+          } else {
+            initialize_block(block_A[i], seed + i);
+            initialize_block(block_B[i], seed + i);
+          }
         } else {
           initialize_block(block_A[i], seed + i);
           initialize_block(block_B[i], seed + i);
