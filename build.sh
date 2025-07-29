@@ -1,6 +1,6 @@
 script_dir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 rm -rf ${script_dir}/.git/hooks/pre-commit
-#rm -rf ${script_dir}/build && mkdir ${script_dir}/build && cd ${script_dir}/build
+rm -rf ${script_dir}/build && mkdir ${script_dir}/build && cd ${script_dir}/build
 
 clear
 
@@ -64,9 +64,9 @@ export OCL_ICD_VENDORS=$HOME
 
 
 # ================= target =================
-#target=./test/unit/cute/intel_xe/cutlass_test_unit_cute_intel_xe
+target=./test/unit/cute/intel_xe/cutlass_test_unit_cute_intel_xe
 #target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_bf16_s8_bf16
-target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_f16
+#target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_f16
 #target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_s8_f16_tensorwise
 #target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_s8
 #target=./benchmarks/gemm/cutlass_benchmarks_gemm_sycl
