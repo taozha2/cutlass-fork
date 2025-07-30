@@ -725,12 +725,11 @@ void run_int4(Options const& options) {
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using ElementZero = int8_t;
+  using ElementZero = int4_t;
   using ElementScale = MmaType;
 
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
-  using StrideZero = StrideScale;
-  // using StrideZero = cute::Stride<_8, cute::Stride<_1, int64_t>, int64_t>; // int4_t zero point packed 8 elements along K dimension and then along N dimension
+  using StrideZero = cute::conditional_t<sizeof_bits_v<ElementZero> < 8, cute::Stride<_8, cute::Stride<_1, int64_t>, int64_t>, StrideScale>; // int4_t zero point packed 8 elements along K dimension and then along N dimension
 
   using GmemTiledCopyA = copy_a;
   using GmemTiledCopyB = copy_b;
