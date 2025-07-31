@@ -266,8 +266,8 @@ struct ExampleRunner {
     // CUTLASS on SYCL uses the compatibility library syclcompat for e.g. default in-order queue
     syclcompat::wait();
 
-    ElementCompute const epsilon(1e-2f);
-    ElementCompute const non_zero_floor(1e-4f);
+    ElementOutput const epsilon(1e-2f);
+    ElementOutput const non_zero_floor(1e-4f);
     return cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_D.get(), block_D.get(), block_D.size(), epsilon, non_zero_floor);
   }
 
