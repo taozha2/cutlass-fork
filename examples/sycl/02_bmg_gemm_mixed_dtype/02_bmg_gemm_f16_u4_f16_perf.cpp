@@ -308,86 +308,38 @@ struct ExampleRunner {
     q.wait();
   }
 
-  bool verify(const Options &options) {
-      
-    //
-    // Compute reference output (default gemm kernel w/ ElementA == ElementB)
-    //
+  bool verify(const ProblemShapeType& problem_size, ElementCompute alpha, ElementCompute beta) {
+    auto [M, N, K, L] = problem_size;
 
-    using GmemTiledCopyA = XE_2D_U16x32x32_LD_N;
-    using GmemTiledCopyB = XE_2D_U16x16x16_LD_T;
+    cutlass::TensorRef ref_A(block_A_dq.get(), LayoutA::packed({M, K}));
+    cutlass::TensorRef ref_B(block_B_dq.get(), LayoutB::packed({K, N}));
+    cutlass::TensorRef ref_C(block_C.get(), LayoutC::packed({M, N}));
+    cutlass::TensorRef ref_D(block_ref_D.get(), LayoutD::packed({M, N}));
 
-    // Workgroup-level tile
-    using TileShape = Shape<_256, _256, _32>;
+    cutlass::reference::device::GemmComplex(
+          {M, N, K},
+          alpha,
+          ref_A,
+          cutlass::ComplexTransform::kNone,
+          ref_B,
+          cutlass::ComplexTransform::kNone,
+          beta,
+          ref_C,
+          ref_D,
+          ElementAccumulator(0),
+          L,     // batch_count
+          M * K, // batch_stride_A
+          K * N, // batch_stride_B
+          M * N, // batch_stride_C
+          M * N  // batch_stride_D
+        );
 
-    using TiledMma =
-        typename TiledMMAHelper<MMA_Atom<XE_8x16x16_F32F16F16F32_TT>, Layout<TileShape>,
-                                      Layout<Shape<_8, _4, _1>, Stride<_4, _1, _0>>>::TiledMMA;
+    // CUTLASS on SYCL uses the compatibility library syclcompat for e.g. default in-order queue
+    syclcompat::wait();
 
-    constexpr int PipelineStages = 3;
-    using GEMMDispatchPolicy = cutlass::gemm::MainloopIntelXeXMX16<PipelineStages>;
-    using EpilogueDispatchPolicy = cutlass::epilogue::IntelXeXMX16;
-
-    using EpilogueOp = cutlass::epilogue::fusion::LinearCombination<ElementAccumulator, ElementCompute,
-            ElementAccumulator, ElementAccumulator, cutlass::FloatRoundStyle::round_to_nearest>;
-
-    using FusionCallBacks = cutlass::epilogue::fusion::FusionCallbacks<EpilogueDispatchPolicy, EpilogueOp, TileShape,
-            decltype(tile_shape(TiledMma()))>;
-
-    using CollectiveEpilogueRef = cutlass::epilogue::collective::CollectiveEpilogue<
-            EpilogueDispatchPolicy,
-            TileShape,
-            ElementAccumulator,
-            cutlass::gemm::TagToStrideC_t<LayoutC>,
-            ElementOutput,
-            cutlass::gemm::TagToStrideC_t<LayoutD>,
-            FusionCallBacks,
-            XE_2D_U32x8x16_LD_N,
-            void, void,
-            std::conditional_t<sizeof_bits_v<ElementOutput> == 16, XE_2D_U16x8x16_ST_N, XE_2D_U32x8x16_ST_N>,
-            void, void>;
-
-    // Mainloop
-    using CollectiveMainloopRef = cutlass::gemm::collective::CollectiveMma<
-            GEMMDispatchPolicy,
-            TileShape,
-            ElementMMA,
-            cutlass::gemm::TagToStrideA_t<LayoutA>,
-            ElementMMA,
-            cutlass::gemm::TagToStrideB_t<LayoutB>,
-            TiledMma,
-            GmemTiledCopyA, void, void, cute::identity,  // A
-            GmemTiledCopyB, void, void, cute::identity   // B
-    >;
-
-    using GemmKernelRef = cutlass::gemm::kernel::GemmUniversal<
-    Shape<int, int, int, int>,
-    CollectiveMainloopRef,
-    CollectiveEpilogueRef
-    >;
-
-    using GemmRef = cutlass::gemm::device::GemmUniversalAdapter<GemmKernelRef>;
-
-    typename GemmRef::Arguments arguments{
-      cutlass::gemm::GemmUniversalMode::kGemm,
-      {options.m, options.n, options.k, options.l},
-      {block_A_dq.get(), stride_A, block_B_dq.get(), stride_B},
-      {{options.alpha, options.beta}, block_C.get(), stride_C, block_ref_D.get(), stride_D}
-    };
-
-    // Run the gemm where the scaling is performed outside of the kernel.
-    GemmRef gemm_ref;
-    size_t workspace_size = GemmRef::get_workspace_size(arguments);
-    cutlass::device_memory::allocation<uint8_t> workspace(workspace_size);
-    CUTLASS_CHECK(gemm_ref.can_implement(arguments));
-    CUTLASS_CHECK(gemm_ref.initialize(arguments, workspace.get()));
-    CUTLASS_CHECK(gemm_ref.run());
-
-    // compare_reference
-    ElementOutput const epsilon(1e-2f);
-    ElementOutput const non_zero_floor(1e-4f);
-    bool passed = cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_D.get(), block_D.get(), block_D.size(), epsilon, non_zero_floor);
-    return passed;
+    ElementCompute const epsilon(1e-2f);
+    ElementCompute const non_zero_floor(1e-4f);
+    return cutlass::reference::device::BlockCompareRelativelyEqual(block_ref_D.get(), block_D.get(), block_D.size(), epsilon, non_zero_floor);
   }
 
   template <class Element>
@@ -633,7 +585,7 @@ struct ExampleRunner {
     syclcompat::wait();
 
     // Verify that the result is correct
-    bool passed = verify(options);
+    bool passed = verify(problem_size, options.alpha, options.beta);
 
     std::cout << "Disposition: " << (passed ? "Passed" : "Failed") << std::endl;
 
@@ -805,25 +757,25 @@ int main(int argc, const char** argv)
     return -1;
   }
 
-  options.m = 32;
-  options.n = 4096;
-  options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x16x32_LD_N, XE_2D_U4x32x16_LD_T, 16, 64, 128, 1, 4, 1>(options);
+  // options.m = 32;
+  // options.n = 4096;
+  // options.k = 4096;
+  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x16x32_LD_N, XE_2D_U4x32x16_LD_T, 16, 64, 128, 1, 4, 1>(options);
 
-  options.m = 32;
+  // options.m = 32;
+  // options.n = 14336;
+  // options.k = 4096;
+  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 128, 32, 1, 4, 2>(options);
+
+  // options.m = 48;
+  // options.n = 4096;
+  // options.k = 4096;
+  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 64, 32, 1, 4, 0>(options);
+
+  options.m = 48;
   options.n = 14336;
   options.k = 4096;
   run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 128, 32, 1, 4, 2>(options);
-
-  options.m = 48;
-  options.n = 4096;
-  options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 64, 32, 1, 4, 0>(options);
-
-  options.m = 48;
-  options.n = 14336;
-  options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x16x16_LD_T, 64, 128, 32, 1, 8, 2>(options);
 
   return 0;
 }
