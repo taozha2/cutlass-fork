@@ -757,25 +757,25 @@ int main(int argc, const char** argv)
     return -1;
   }
 
-  // options.m = 32;
-  // options.n = 4096;
-  // options.k = 4096;
-  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x16x32_LD_N, XE_2D_U4x32x16_LD_T, 16, 64, 128, 1, 4, 1>(options);
+  options.m = 32;
+  options.n = 4096;
+  options.k = 4096;
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x16x32_LD_N, XE_2D_U4x32x16_LD_T, 16, 64, 128, 1, 4, 1>(options);
 
-  // options.m = 32;
-  // options.n = 14336;
-  // options.k = 4096;
-  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 128, 32, 1, 4, 2>(options);
+  options.m = 32;
+  options.n = 14336;
+  options.k = 4096;
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 128, 32, 1, 4, 2>(options);
 
-  // options.m = 48;
-  // options.n = 4096;
-  // options.k = 4096;
-  // run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 64, 32, 1, 4, 0>(options);
+  options.m = 48;
+  options.n = 4096;
+  options.k = 4096;
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 64, 32, 1, 4, 0>(options);
 
   options.m = 48;
   options.n = 14336;
   options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 128, 32, 1, 4, 2>(options);
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 64, 128, 32, 1, 8, 2>(options);
 
   return 0;
 }

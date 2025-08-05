@@ -15,8 +15,8 @@ unset IGC_ExtraOCLOptions
 unset ONEAPI_DEVICE_SELECTOR
 unset OCL_ICD_VENDORS
 
-#. /opt/intel/oneapi/2025.1/oneapi-vars.sh
-. /opt/intel/oneapi/setvars.sh
+. /opt/intel/oneapi/2025.1/oneapi-vars.sh
+#. /opt/intel/oneapi/setvars.sh
 
 export CC=icx
 export CXX=icpx

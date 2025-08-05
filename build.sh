@@ -90,12 +90,13 @@ $target
 #unitrace -k --chrome-kernel-logging --chrome-device-logging --chrome-no-thread-on-device --chrome-no-engine-on-device -i 20 $target -o cutlass.csv
 
 #check stalls
-#unitrace --chrome-kernel-logging --stall-sampling -i 20 -o cutlass_pvc_gemm.csv $target
+unitrace --chrome-kernel-logging --stall-sampling -i 20 -o cutlass_pvc_gemm.csv $target
 
 #unitrace --metric-list
 #unitrace -k -g <group> -i 20 --chrome-kernel-logging $target -o
 
-perf_py=/home/zt/workspace/cutlass/unitrace/tools/unitrace/scripts/metrics/analyzeperfmetrics.py
+perf_py=/home/taozha2/workspace/cutlass/applications.analyzers.profilingtoolsinterfaces.sdk/tools/unitrace/scripts/metrics/analyzeperfmetrics.py
+#/home/zt/workspace/cutlass/unitrace/tools/unitrace/scripts/metrics/analyzeperfmetrics.py
 #csv_file=cutlass_pvc_gemm.metrics.3584319.csv
 #python3 $perf_py -l $csv_file
 #python3 $perf_py -m "XVE_STALL[%],XVE_THREADS_OCCUPANCY_ALL[%],XVE_INST_EXECUTED_ALU0_ALL_UTILIZATION[%],XVE_INST_EXECUTED_ALU1_ALL_UTILIZATION[%],XVE_INST_EXECUTED_SEND_ALL_UTILIZATION[%],XVE_INST_EXECUTED_CONTROL_ALL_UTILIZATION[%],XVE_INST_EXECUTED_XMX_ALL_UTILIZATION[%]" -y "Occupancy, Stalls and Function Unit Utilizations" -m "AvgGpuSliceFrequencyMHz[MHz]" -y "Frequency" -m "L3_BYTE_READ[bytes],L3_BYTE_WRITE[bytes],GPU_MEMORY_BYTE_READ[bytes],GPU_MEMORY_BYTE_WRITE[bytes]" -y "L3 and Memory" -m "XVE_ACTIVE[%],XVE_STALL[%]" -y "Active and Stalls" -b "L3_BYTE_READ[bytes],L3_BYTE_WRITE[bytes],GPU_MEMORY_BYTE_READ[bytes],GPU_MEMORY_BYTE_WRITE[bytes]" -t "Hardware Metrics" ${csv_file}
