@@ -51,7 +51,7 @@ cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DCUTLASS_SYCL_PROFILING_ENABLED=ON -
 # wall time
 #cmake .. -G Ninja -DCUTLASS_ENABLE_SYCL=ON -DCUTLASS_SYCL_PROFILING_ENABLED=OFF -DDPCPP_SYCL_TARGET=intel_gpu_bmg_g21 -DCUTLASS_ENABLE_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=Release
 
-target=./examples/sycl/11_pvc_gemm_int4_streamk/11_pvc_gemm_int4_streamk
+target=./examples/sycl/02_bmg_gemm_mixed_dtype/02_bmg_gemm_f16_u4_f16
 ninja $target && \
 $target --m=32 --n=14336 --k=4096 --l=1 --iterations=20 --flush_cache=1 --warmup=10 --l3_cache_size=32
 

@@ -89,7 +89,7 @@ enum GemmMode {
 #define CACHE_CNT (2)
 
 using MmaType = half_t;
-using QuantType = uint4_t;//_BitInt(4);
+using QuantType = _BitInt(4);
 
 // Command line options parsing
 struct Options {
@@ -677,7 +677,7 @@ void run_int4(Options const& options) {
   using LayoutC = cutlass::layout::RowMajor;
   using LayoutD = cutlass::layout::RowMajor;
 
-  using ElementZero = int4_t;
+  using ElementZero = QuantType;
   using ElementScale = MmaType;
 
   using StrideScale = cute::Stride<_1, int64_t, int64_t>;
@@ -775,7 +775,7 @@ int main(int argc, const char** argv)
   options.m = 48;
   options.n = 14336;
   options.k = 4096;
-  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 64, 128, 32, 1, 8, 2>(options);
+  run_int4<cutlass::layout::RowMajor, cutlass::layout::ColumnMajor, XE_2D_U16x32x32_LD_N, XE_2D_U4x32x16_LD_T, 32, 64, 32, 1, 4, 2>(options);
 
   return 0;
 }

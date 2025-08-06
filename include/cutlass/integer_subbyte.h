@@ -234,6 +234,11 @@ struct sizeof_bits<bin1_t> {
   static constexpr int value = 1;
 };
 
+template <int Bits>
+struct sizeof_bits<_BitInt(Bits)> {
+  static constexpr int value = Bits;
+};
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 namespace platform {
@@ -293,6 +298,33 @@ public:
 
   static constexpr bool is_integer = true;
   static constexpr bool is_signed = false;
+};
+
+template<int NumBits>
+struct numeric_limits<_BitInt(NumBits)> {
+private:
+  using value_type = _BitInt(NumBits);
+
+public:
+  CUTLASS_HOST_DEVICE static value_type lowest() noexcept {
+    return value_type{
+      -(1 << (NumBits - 1))
+    };
+  }
+
+  CUTLASS_HOST_DEVICE static value_type max() noexcept {
+    return value_type{
+      (1 << (NumBits - 1)) - 1
+    };
+  }
+
+  CUTLASS_HOST_DEVICE static value_type const min() noexcept {
+    return lowest();
+  }
+
+  static constexpr bool is_integer = true;
+  static constexpr bool is_signed = true;
+  static constexpr bool has_infinity = false;
 };
 
 } // namespace platform
