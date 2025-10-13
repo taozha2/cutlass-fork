@@ -90,7 +90,6 @@ public:
   using CtaTileMNK = CtaTileMNK_;
   using FusionCallbacks = FusionCallbacks_;
   using ElementC = ElementC_;
-  using ElementAccumulator = ElementC_;
   using StrideC = StrideC_;
   using ElementD = ElementD_;
   using StrideD = StrideD_;
@@ -102,11 +101,12 @@ public:
   using CopyOpR2S = CopyOpR2S_;
 
   using ThreadEpilogueOp = typename fusion::FusionCallbacksTraits<FusionCallbacks>::Operation;
-  using GmemTiledCopyC = conditional_t<cute::is_void_v<CopyOpG2R>, XE_2D_U32x8x16_LD_N, CopyOpG2R>;
+  using GmemTiledCopyC = cute::conditional_t<not cute::is_void_v<ElementC> && not cute::is_void_v<CopyOpG2R>,
+                                             CopyOpG2R, XE_2D_U32x8x16_LD_N>;
   using GmemTiledCopyD = cute::conditional_t<not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>,
                                              CopyOpR2G, XE_2D_U32x8x16_ST_N>;
   using ElementOutput = ElementD;
-  using ElementCompute = ElementAccumulator;
+  using ElementCompute = typename ThreadEpilogueOp::ElementCompute;
 
   static constexpr int SubgroupSize = DispatchPolicy::SubgroupSize;
 
@@ -123,14 +123,14 @@ public:
   
   using Trait_C = Copy_Traits<GmemTiledCopyC, StrideC>;
   using val_layout_load_C = decltype(make_layout(shape_div(typename Trait_C::BlockShape{}, CopyThreadShape{})));
-  using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<Trait_C, ElementC>{}, Layout<CopyThreadShape>{}, val_layout_load_C{}));
+  using XE_Copy_C = decltype(make_tiled_copy(Copy_Atom<Trait_C, conditional_t<cute::is_void_v<ElementC>, uint32_t, ElementC>>{}, Layout<CopyThreadShape>{}, val_layout_load_C{}));
 
   using Trait_D = Copy_Traits<GmemTiledCopyD, StrideD>;
   using val_layout_store_D = decltype(make_layout(shape_div(typename Trait_D::BlockShape{}, CopyThreadShape{})));
-  using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, ElementD>{}, Layout<CopyThreadShape>{}, val_layout_store_D{}));
+  using XE_Copy_D = decltype(make_tiled_copy(Copy_Atom<Trait_D, conditional_t<cute::is_void_v<ElementD>, uint32_t, ElementD>>{}, Layout<CopyThreadShape>{}, val_layout_store_D{}));
 
 private:
-  constexpr static bool is_source_supported = not cute::is_void_v<ElementC>;
+  constexpr static bool is_source_supported = not cute::is_void_v<ElementC> && not cute::is_void_v<CopyOpG2R>;
   constexpr static bool is_destination_supported = not cute::is_void_v<ElementD> && not cute::is_void_v<CopyOpR2G>;
 
   constexpr static bool is_m_major_C = detail::is_m_major<StrideC>();

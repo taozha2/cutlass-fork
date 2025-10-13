@@ -145,7 +145,7 @@ template <class FMHAPrefillKernel, bool isVarLen> struct ExampleRunner {
   using CollectiveEpilogue = typename FMHAPrefillKernel::CollectiveEpilogue;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
-  using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
+  
 
   using ProblemShapeType = typename FMHAPrefillKernel::ProblemShape;
 

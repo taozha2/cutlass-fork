@@ -160,7 +160,7 @@ template <class FMHAKernel, bool isVarLen> struct ExampleRunner {
   using CollectiveEpilogue = typename FMHAKernel::CollectiveEpilogue;
   using ElementOutput = typename CollectiveEpilogue::ElementOutput;
   using ElementCompute = typename CollectiveEpilogue::ElementCompute;
-  using ElementAccumulator = typename CollectiveEpilogue::ElementAccumulator;
+  
 
   using ProblemShapeType = typename FMHAKernel::ProblemShape;
 
