@@ -56,8 +56,6 @@
 template<class...> class CopyKernelGlobalName;
 
 using namespace cute;
-namespace syclex = sycl::ext::oneapi::experimental;
-namespace intelex = sycl::ext::intel::experimental;
 // template <class TensorS, class TensorD, class TiledCopy>
 // void copy_kernel_SLM(TensorS S, TensorD D, TiledCopy Op) {
 //   // Shared memory buffers
@@ -66,6 +64,46 @@ namespace intelex = sycl::ext::intel::experimental;
 //   auto thr_copy_load = load.get_thread_slice(ThreadIdxX());
 //   Tensor thr_tile_load_S = 
 // }
+
+template<class TensorS, class CtaTiler, class SmemLayout, class ThreadLayout>
+void copy_kernel_vector(TensorS S, CtaTiler cta_tiler, SmemLayout smem_layout, ThreadLayout t_layout) {
+  static_assert(is_static<SmemLayout>::value);
+  using Element = typename TensorS::value_type;
+  auto smem = compat::local_mem<Element[cosize_v<SmemLayout>]>();
+
+//   auto cta_coord = make_coord(compat::work_group_id::x(), compat::work_group_id::y(), _);
+  
+  using COPY_ATOM = XE_LOAD_2D<sizeof_bits_v<Element>, 16, 16>;
+  auto copy_global = make_block_2d_copy_X<Element>(COPY_ATOM{}, S.stride(),
+                        find_x_mode(S.stride()), find_y_mode(S.stride()),
+                        make_tile(_32{}, _256{}),
+                        Layout<Shape<_2, _16>>{}).with(S);
+
+  auto thr_copy_global = copy_global.get_slice(compat::local_id::x());
+  /* Create proxy coordinate tensors for each global tensor */
+  Tensor cC = make_identity_tensor(S.shape());   // (M,K)
+  Tensor gS = local_tile(cC, select<0,2>(cta_tiler), make_coord(compat::work_group_id::x(),_));  // (BLK_M,BLK_K,k)
+  Tensor sD = make_tensor(make_smem_ptr(smem), smem_layout);          // (BLK_M,BLK_K,stages)
+  /* Register fragments for copies */
+  auto trS = thr_copy_global.partition_sg_fragment_D(gS(_,_,0));
+  /* Partition global tensor (proxies) for copies */
+  Tensor tgS = thr_copy_global.partition_S(gS);
+
+#if 0
+  #define PRINT(x) print(#x ": "); print(x); print("\n");
+  if(cute::thread0()) {
+    PRINT(trS);
+    PRINT(tgS);
+    PRINT(gS);
+  }
+#endif
+  
+  int k_tile_count = ceil_div(shape<1>(S), get<2>(cta_tiler));
+  for(int k_tile = 0; k_tile < k_tile_count; ++k_tile) {
+    copy(copy_global, tgS(_,_,_,k_tile), trS);
+  }
+
+}
 
 template<class TensorS, class CtaTiler, class SmemLayout, class ThreadLayout>
 void copy_kernel_naive(TensorS S, CtaTiler cta_tiler, SmemLayout smem_layout, ThreadLayout t_layout) {
@@ -120,8 +158,7 @@ int main(int argc, char** argv) {
   auto device_src = compat::malloc<Element>(M * K);
   compat::memcpy<Element>(device_src, host_src.data(), M * K);
   Tensor S = make_tensor(make_gmem_ptr(device_src),
-                         make_layout(make_shape(M, K), make_stride(K, 1)));
-
+                         make_layout(make_shape(M, K), make_stride(K, _1{})));
 
   auto dimBlock = compat::dim3(size(thread_layout));
   auto dimGrid  = compat::dim3(size(ceil_div(M, bM{})));
