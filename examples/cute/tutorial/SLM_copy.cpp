@@ -58,6 +58,51 @@ template<class...> class CopyKernelGlobalName;
 using namespace cute;
 
 template<class TensorS, class CtaTiler, class SmemLayout, class ThreadLayout>
+void copy_kernel_ocl(TensorS S, CtaTiler cta_tiler, SmemLayout smem_layout, ThreadLayout t_layout) {
+  static_assert(is_static<SmemLayout>::value);
+  using Element = typename TensorS::value_type;
+  auto smem = compat::local_mem<Element[cosize_v<SmemLayout>]>();
+
+//   auto cta_coord = make_coord(compat::work_group_id::x(), compat::work_group_id::y(), _);
+  
+  using traits_load = Copy_Traits<XE_2D_U32x8x16_LD_N, decltype(S)>;
+  using Atom_load = Copy_Atom<traits_load, Element>;
+  auto tiled_copy_load = make_tiled_copy(Atom_load{}.with(S),
+                                         Layout<Shape<_1, _16>>{},
+                                         make_layout(shape_div(typename traits_load::BlockShape{}, Shape<_1, _16>{})));
+
+  auto S_coord = cute::get_xe_tensor(append(S.shape(),_1{}))(_,_,0);
+
+  Tensor tiled_tensor_S = tiled_divide(
+    S_coord, select<0,2>(cta_tiler)); // ((M, N), m', n')
+  // Slice work group.
+  Tensor tile_wg_S = tiled_tensor_S(make_coord(_, _), BlockIdxX(), BlockIdxY());
+  
+  auto thr_copy_load =
+      tiled_copy_load.get_thread_slice(cutlass::get_sub_group_local_id());
+  auto SubgroupShape = Shape<_16, _16>{};
+  auto sg_id = cutlass::get_sub_group_id();
+  Tensor tile_sg_S = local_tile(tile_wg_S, SubgroupShape, sg_id);
+  Tensor thr_tile_load_S = thr_copy_load.partition_S(tile_sg_S);
+  Tensor thr_tile_load_D = thr_copy_load.partition_D(tile_sg_S);
+  Tensor fragment = make_tensor<Element>(thr_tile_load_D.shape());
+#if 0
+  #define PRINT(x) print(#x ": "); print(x); print("\n");
+  if(cute::thread0()) {
+    PRINT(tiled_tensor_S);
+    PRINT(fragment);
+    PRINT(tile_wg_S);
+  }
+#endif
+  
+  int k_tile_count = size<1>(thr_tile_load_S);
+
+  copy(tiled_copy_load, thr_tile_load_S, fragment);
+
+}
+
+
+template<class TensorS, class CtaTiler, class SmemLayout, class ThreadLayout>
 void copy_kernel_vector(TensorS S, CtaTiler cta_tiler, SmemLayout smem_layout, ThreadLayout t_layout) {
   static_assert(is_static<SmemLayout>::value);
   using Element = typename TensorS::value_type;
@@ -92,10 +137,10 @@ void copy_kernel_vector(TensorS S, CtaTiler cta_tiler, SmemLayout smem_layout, T
   
   int k_tile_count = ceil_div(shape<1>(S), get<2>(cta_tiler));
 
-  #pragma unroll
-  for(int k_tile = 0; k_tile < k_tile_count; ++k_tile) {
-    copy(copy_global, tgS(_,_,_,k_tile), trS);
-  }
+  // #pragma unroll
+  // for(int k_tile = 0; k_tile < k_tile_count; ++k_tile) {
+    copy(copy_global, tgS(_,_,_,0), trS);
+  // }
 
 }
 
@@ -174,8 +219,8 @@ void copy_kernel_naive(TensorS S, CtaTiler cta_tiler, SmemLayout smem_layout, Th
 }
 
 int main(int argc, char** argv) {
-  int M = 4096;
-  int K = 4096 * 16;
+  constexpr int M = 4096;
+  constexpr int K = 4096 * 16;
 
   using Element = uint32_t;
 
@@ -195,7 +240,7 @@ int main(int argc, char** argv) {
   auto device_src = compat::malloc<Element>(M * K);
   compat::memcpy<Element>(device_src, host_src.data(), M * K);
   Tensor S = make_tensor(make_gmem_ptr(device_src),
-                         make_layout(make_shape(M, K), make_stride(K, _1{})));
+                         make_layout(make_shape(Int<M>{}, Int<K>{}), make_stride(Int<K>{}, _1{})));
 
   auto dimBlock = compat::dim3(size(thread_layout));
   auto dimGrid  = compat::dim3(size(ceil_div(M, bM{})));
@@ -207,7 +252,7 @@ int main(int argc, char** argv) {
 
   timer.start();
   for (int i = 0; i < iterations; ++i) {
-    auto event = compat::launch<copy_kernel_naive<decltype(S), CtaTiler, decltype(smem_layout),
+    auto event = compat::launch<copy_kernel_ocl<decltype(S), CtaTiler, decltype(smem_layout),
                               decltype(thread_layout)>, CopyKernelGlobalName<decltype(S), CtaTiler, decltype(smem_layout),
                               decltype(thread_layout)>>(
         dimGrid, dimBlock, S, CtaTiler{}, smem_layout, thread_layout);
