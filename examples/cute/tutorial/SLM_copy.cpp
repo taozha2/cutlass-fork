@@ -160,6 +160,7 @@ void copy_kernel_naive(TensorS S, CtaTiler cta_tiler, SmemLayout smem_layout, Th
   #pragma unroll
   for(int k_tile = 0; k_tile < K_TILE_MAX; ++k_tile) {
     copy(tgS(_, _, k_tile), tsD(_, _, k_tile % stages));
+    compat::wg_barrier();// Wait for all threads to write to smem
   }
   
 #if 0
@@ -174,7 +175,7 @@ void copy_kernel_naive(TensorS S, CtaTiler cta_tiler, SmemLayout smem_layout, Th
 
 int main(int argc, char** argv) {
   int M = 4096;
-  int K = 4096 * 4;
+  int K = 4096 * 16;
 
   using Element = uint32_t;
 
