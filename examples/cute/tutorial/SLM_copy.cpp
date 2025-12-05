@@ -66,7 +66,7 @@ void copy_kernel_ocl(TensorS S, CtaTiler cta_tiler, SmemLayout smem_layout, Thre
   auto smem = compat::local_mem<Element[cosize_v<SmemLayout>]>();
 
 //   auto cta_coord = make_coord(compat::work_group_id::x(), compat::work_group_id::y(), _);
-  
+  Tensor sD = make_tensor(make_smem_ptr(smem), smem_layout);          // (BLK_M,BLK_N,stages)
   using traits_load = Copy_Traits<XE_2D_U32x16x16_LD_N, decltype(S)>;
   using Atom_load = Copy_Atom<traits_load, Element>;
   auto tiled_copy_load = make_tiled_copy(Atom_load{}.with(S),
@@ -89,6 +89,15 @@ void copy_kernel_ocl(TensorS S, CtaTiler cta_tiler, SmemLayout smem_layout, Thre
   Tensor thr_tile_load_S = thr_copy_load.partition_S(tile_sg_S);
   Tensor thr_tile_load_D = thr_copy_load.partition_D(tile_sg_S);
   Tensor fragment = make_tensor<Element>(thr_tile_load_D.shape());
+
+  
+  auto tiled_slm =
+      make_tiled_copy(Copy_Atom<UniversalCopy<uint64_t>, Element>{},
+                      t_layout,
+                      Layout<Shape<_4, _2>, Stride<_2,_1>>{});
+  auto thr_copy = tiled_slm.get_slice(ThreadIdxX());
+  Tensor thr_local_D = thr_copy.partition_D(sD(_, _, 0));
+  auto trD = make_tensor(fragment.data(), thr_local_D.layout());
 #if 0
   if(cute::thread0()) {
     PRINT(tiled_tensor_S);
@@ -99,7 +108,8 @@ void copy_kernel_ocl(TensorS S, CtaTiler cta_tiler, SmemLayout smem_layout, Thre
 #endif
 
   copy(tiled_copy_load, thr_tile_load_S, fragment);
-
+  copy(tiled_slm, trD, thr_local_D);
+  compat::wg_barrier();
 }
 
 
@@ -127,18 +137,25 @@ void copy_kernel_vector(TensorS S, CtaTiler cta_tiler, SmemLayout smem_layout, T
   /* Partition global tensor (proxies) for copies */
   Tensor tgS = thr_copy_global.partition_S(gS);
 
+  auto tiled_slm =
+      make_tiled_copy(Copy_Atom<UniversalCopy<uint64_t>, Element>{},
+                      t_layout,
+                      Layout<Shape<_4, _2>, Stride<_2,_1>>{});
+  auto thr_copy = tiled_slm.get_slice(ThreadIdxX());
+  Tensor thr_local_D = thr_copy.partition_D(sD(_, _, 0));
+  auto trD = make_tensor(trS.tensor().data(), thr_local_D.layout());
+
+  copy(copy_global, tgS, trS);
+  copy(tiled_slm, trD, thr_local_D);
+  compat::wg_barrier();
 #if 0
   if(cute::thread0()) {
     PRINT(trS);
     PRINT(tgS);
     PRINT(gS);
+    PRINT(trD);
   }
 #endif
-  
-  int k_tile_count = ceil_div(shape<1>(S), get<2>(cta_tiler));
-
-  copy(copy_global, tgS, trS);
-
 }
 
 template<class TensorS, class CtaTiler, class SmemLayout, class ThreadLayout>
@@ -206,8 +223,8 @@ void copy_kernel_naive(TensorS S, CtaTiler cta_tiler, SmemLayout smem_layout, Th
 }
 
 int main(int argc, char** argv) {
-  constexpr uint M = 256*5;
-  constexpr uint N = 256*4;
+  constexpr uint M = 256*16;
+  constexpr uint N = 256*16;
 
   using Element = uint32_t;
 
@@ -222,8 +239,10 @@ int main(int argc, char** argv) {
   using stages = _2;
   using CtaTiler = Shape<bM, bN, _0>; 
   auto thread_layout = Layout<Shape<_4, _128>, Stride<_128, _1>>{};
-  auto smem_layout = Layout<Shape<bM, bN, stages>, Stride<bN, _1, _8192>>{};
-
+  // auto smem_layout = Layout<Shape<bM, bN, stages>, Stride<bN, _1, _8192>>{};
+  auto smem_layout = composition(
+          Swizzle<2,1,3>{},
+          Layout<Shape<bM, bN, stages>, Stride<bN, _1, _8192>>{});
   auto device_src = compat::malloc<Element>(M * N);
   compat::memcpy<Element>(device_src, host_src.data(), M * N);
   Tensor S = make_tensor(make_gmem_ptr(device_src),
